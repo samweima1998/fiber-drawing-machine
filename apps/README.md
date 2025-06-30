@@ -25,8 +25,9 @@ sudo apt-get update
 
 sudo apt-get install git
 sudo apt-get install python3-pip
+sudo apt install libgpiod-dev
 
-git clone https://github.com/samweima1998/multi-half-bridge.git
+git clone https://github.com/samweima1998/fiber-drawing-machine.git
 
 #Manually get and install bcm2835
 wget http://www.airspayce.com/mikem/bcm2835/bcm2835-1.71.tar.gz
@@ -37,7 +38,7 @@ make
 sudo make install
 cd
 
-cd multi-half-bridge
+cd fiber-drawing-machine
 pip3 install -r apps/requirements.txt
 
 # Test run Server
@@ -64,7 +65,7 @@ Description=Python Server
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/python /home/pi/multi-half-bridge/apps/server.py
+ExecStart=/usr/bin/python /home/pi/fiber-drawing-machine/apps/server.py
 WorkingDirectory=/home/pi
 StandardOutput=inherit
 StandardError=inherit

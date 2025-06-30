@@ -5,4 +5,3 @@ python-multipart
 asyncio
 pathlib
 typing
-libgpiod

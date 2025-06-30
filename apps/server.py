@@ -53,7 +53,7 @@ shutdown_flag = False
 current_file_path = Path(__file__).resolve()
 # control_executable = current_file_path.parent.parent / "build" / "control"
 # control_executable = current_file_path.parent.parent / "build" / "patternControl"
-stepper_executable = current_file_path.parent.parent / "build" / "stepperMotorGPIO"
+stepper_executable = current_file_path.parent.parent / "build" / "stepperMotor"
 
 class DotData(BaseModel):
     index: int
