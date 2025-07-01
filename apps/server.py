@@ -14,7 +14,7 @@ import json
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 import signal
-
+from fastapi import Response
 
 logging.basicConfig(level=logging.INFO)
 
@@ -65,7 +65,18 @@ class DotBatch(BaseModel):
 # Global lock to prevent overlapping /send_dots executions
 send_dots_lock = asyncio.Lock()
 
-@app.post("/send_dots")
+@app.get("/status")
+async def get_status():
+    # Replace these with real sensor readings or variables
+    status = {
+        "drawing_temperature": 123.4,
+        "curing_temperature": 56.7,
+        "drawing_pressure": 1.23,
+        "status": "Running"
+    }
+    return status
+
+@app.post("/send_data")
 async def receive_dots(batch: DotBatch):
     if send_dots_lock.locked():
         raise HTTPException(status_code=429, detail="Previous /send_dots still in progress")

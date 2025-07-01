@@ -5,22 +5,30 @@
 		<link rel="icon" href="./favicon.png" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		
-		<link href="./_app/immutable/assets/0.5771d4e1.css" rel="stylesheet">
-		<link href="./_app/immutable/assets/2.547d6277.css" rel="stylesheet">
-		<link rel="modulepreload" href="./_app/immutable/entry/start.934ed86f.js">
+		<link href="./_app/immutable/assets/0.e62625d0.css" rel="stylesheet">
+		<link href="./_app/immutable/assets/2.db5b0f50.css" rel="stylesheet">
+		<link rel="modulepreload" href="./_app/immutable/entry/start.9f312c13.js">
 		<link rel="modulepreload" href="./_app/immutable/chunks/scheduler.e108d1fd.js">
-		<link rel="modulepreload" href="./_app/immutable/chunks/singletons.39cbf9d6.js">
-		<link rel="modulepreload" href="./_app/immutable/entry/app.2262c245.js">
-		<link rel="modulepreload" href="./_app/immutable/chunks/index.d5bc05ac.js">
-		<link rel="modulepreload" href="./_app/immutable/nodes/0.e375eda0.js">
-		<link rel="modulepreload" href="./_app/immutable/nodes/2.ce526fc7.js">
+		<link rel="modulepreload" href="./_app/immutable/chunks/singletons.116dc4c5.js">
+		<link rel="modulepreload" href="./_app/immutable/entry/app.243fabf6.js">
+		<link rel="modulepreload" href="./_app/immutable/chunks/index.786a472e.js">
+		<link rel="modulepreload" href="./_app/immutable/nodes/0.da2228a9.js">
+		<link rel="modulepreload" href="./_app/immutable/nodes/2.a900a87b.js">
 	</head>
 	<body data-sveltekit-preload-data="hover">
-		<div style="display: contents">  <main><svg class="svelte-14k7rhk"></svg>  <button class="svelte-14k7rhk" data-svelte-h="svelte-h7k3p2">Send Data</button></main> 
+		<div style="display: contents">  <main><form class="svelte-9bdtug"><label class="svelte-9bdtug">Drawing Temperature:
+			<input type="text" class="svelte-9bdtug" value="">
+			°C</label> <label class="svelte-9bdtug">Curing Temperature:
+			<input type="text" class="svelte-9bdtug" value="">
+			°C</label> <label class="svelte-9bdtug">Drawing Pressure:
+			<input type="text" class="svelte-9bdtug" value=""></label> <label class="svelte-9bdtug">Drawing Height:
+			<input type="text" class="svelte-9bdtug" value=""></label> <label class="svelte-9bdtug">Curing Intensity:
+			<input type="text" class="svelte-9bdtug" value=""></label> <label class="svelte-9bdtug">Curing Time:
+			<input type="text" class="svelte-9bdtug" value=""></label> <button type="submit" class="svelte-9bdtug" data-svelte-h="svelte-d9o41x">Send Data</button></form> <div class="status-panel svelte-9bdtug"><h2 data-svelte-h="svelte-xow0p3">Machine Status</h2> <p>Drawing Temperature:  °C</p> <p>Curing Temperature:  °C</p> <p>Drawing Pressure:  bar</p> <p>Status: </p></div> </main> 
 			
 			<script>
 				{
-					__sveltekit_sv13p9 = {
+					__sveltekit_1cjlhsv = {
 						base: new URL(".", location).pathname.slice(0, -1),
 						env: {}
 					};
@@ -30,8 +38,8 @@
 					const data = [null,null];
 
 					Promise.all([
-						import("./_app/immutable/entry/start.934ed86f.js"),
-						import("./_app/immutable/entry/app.2262c245.js")
+						import("./_app/immutable/entry/start.9f312c13.js"),
+						import("./_app/immutable/entry/app.243fabf6.js")
 					]).then(([kit, app]) => {
 						kit.start(app, element, {
 							node_ids: [0, 2],
