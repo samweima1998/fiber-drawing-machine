@@ -1,37 +1,39 @@
-# ------------ configurable bits ---------------------------------
+# ---------- toolchain & flags -----------------------------------
 CXX      := g++
-CXXFLAGS := -std=c++20 -O2 -Wall -Wextra -pedantic   # adjust to taste
-LDFLAGS  :=                                          # e.g. -pthread
+CXXFLAGS := -std=c++20 -O2 -Wall -Wextra -pedantic
+LDFLAGS  := -lgpiod
 # ----------------------------------------------------------------
 
-# Where to drop the executables
-BUILD_DIR := ../build           # relative to this Makefile
+# Target directory for the binaries ( ../build relative to src/)
+BUILD_DIR := ../build
 
-# Collect sources and derive target paths
-SRCS      := $(wildcard *.cpp)
-BINS      := $(basename $(SRCS))                     # foo.cpp → foo
-PROGS     := $(addprefix $(BUILD_DIR)/,$(BINS))      # … → ../build/foo
+# All .cpp files in this directory
+SRCS    := $(wildcard *.cpp)
+# stepperMotor.cpp → stepperMotor
+BASEN   := $(patsubst %.cpp,%,$(SRCS))
+# ../build/stepperMotor  …
+TARGETS := $(addprefix $(BUILD_DIR)/,$(BASEN))
 
-# Default goal ---------------------------------------------------
+# default goal ----------------------------------------------------
 .PHONY: all
-all: $(BUILD_DIR) $(PROGS)
+all: $(TARGETS)
 
-# Ensure the build directory exists
+# ensure the directory exists (one *and only one* rule for it!)
 $(BUILD_DIR):
 	@mkdir -p $@
 
-# Pattern rule: compile each source into its exec in BUILD_DIR ----
-# $@ = ../build/foo   $< = foo.cpp
+# pattern rule: build each executable straight into BUILD_DIR -----
+# $@ = ../build/foo     $< = foo.cpp
 $(BUILD_DIR)/%: %.cpp | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) $< -o $@ $(LDFLAGS)
 
-# Convenience extras ---------------------------------------------
-.PHONY: clean rebuild debug
+# housekeeping ----------------------------------------------------
+.PHONY: clean debug rebuild
 
-clean:                  # remove everything in BUILD_DIR that we made
-	$(RM) $(PROGS)
+clean:
+	$(RM) $(TARGETS)
 
-debug:                  # same build, but with -Og -g for debugging
+debug:
 	$(MAKE) CXXFLAGS='$(CXXFLAGS) -Og -g' all
 
-rebuild: clean all      # nuke & re-build from scratch
+rebuild: clean all
