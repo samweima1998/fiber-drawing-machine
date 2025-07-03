@@ -69,10 +69,9 @@ send_dots_lock = asyncio.Lock()
 async def get_status():
     # Replace these with real sensor readings or variables
     status = {
-        "drawing_temperature": 123.4,
-        "curing_temperature": 56.7,
-        "drawing_pressure": 1.23,
-        "status": "Running"
+        "current_temperature": 123.4,
+        "current_pressure": 1.23,
+        "status": "Idle"
     }
     return status
 
