@@ -75,16 +75,21 @@ async def get_status():
     }
     return status
 
-async def read_temp():
-    device_file = '/sys/bus/w1/devices/28-00000fc8aa09/w1_slave'
-    with open(device_file, 'r') as f:
-        lines = f.readlines()
-        if lines[0].strip()[-3:] != 'YES':
+def read_temp(sensor_path: str = "/sys/bus/w1/devices/28-00000fc8aa09/w1_slave") -> float:
+    """
+    Reads the temperature from a 1-wire sensor file.
+    Returns the temperature in Celsius, or None if reading fails.
+    """
+    try:
+        with open(sensor_path, "r") as f:
+            lines = f.readlines()
+        if len(lines) < 2 or "YES" not in lines[0]:
             return None
-        equals_pos = lines[1].find('t=')
-        if equals_pos != -1:
-            temp_string = lines[1][equals_pos+2:]
-            return float(temp_string) / 1000.0
+        temp_str = lines[1].split("t=")[-1].strip()
+        return float(temp_str) / 1000.0
+    except Exception as e:
+        logging.error(f"Failed to read temperature: {e}")
+        return None
 
 @app.post("/send_data")
 async def receive_dots(batch: DotBatch):
