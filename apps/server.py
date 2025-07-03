@@ -76,7 +76,7 @@ async def get_status():
     return status
 
 async def read_temp():
-    device_file = '/sys/bus/w1/devices/28-28-00000fc8aa09/w1_slave'
+    device_file = '/sys/bus/w1/devices/28-00000fc8aa09/w1_slave'
     with open(device_file, 'r') as f:
         lines = f.readlines()
         if lines[0].strip()[-3:] != 'YES':
