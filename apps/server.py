@@ -65,15 +65,16 @@ class DotBatch(BaseModel):
 # Global lock to prevent overlapping /send_dots executions
 send_dots_lock = asyncio.Lock()
 
-@app.get("/status")
-async def get_status():
-    # Replace these with real sensor readings or variables
-    status = {
-        "current_temperature": read_temp() or 0.0,  # Read temperature from sensor
-        "current_pressure": 1.23,
-        "status": "Idle"
-    }
-    return status
+# Global variable to store the latest temperature
+latest_temperature: float = 0.0
+
+async def temperature_reader_task(sensor_path: str = "/sys/bus/w1/devices/28-00000fc8aa09/w1_slave"):
+    global latest_temperature, shutdown_flag
+    while not shutdown_flag:
+        temp = read_temp(sensor_path)
+        if temp is not None:
+            latest_temperature = temp
+        await asyncio.sleep(1)  # Read every second
 
 def read_temp(sensor_path: str = "/sys/bus/w1/devices/28-00000fc8aa09/w1_slave") -> float:
     """
@@ -90,6 +91,15 @@ def read_temp(sensor_path: str = "/sys/bus/w1/devices/28-00000fc8aa09/w1_slave")
     except Exception as e:
         logging.error(f"Failed to read temperature: {e}")
         return None
+
+@app.get("/status")
+async def get_status():
+    status = {
+        "current_temperature": latest_temperature,
+        "current_pressure": 1.23,
+        "status": "Idle"
+    }
+    return status
 
 @app.post("/send_data")
 async def receive_dots(batch: DotBatch):
@@ -212,7 +222,7 @@ async def startup_event():
 
     # Reversing the order of the two create tasks below causes CS1 to become unresponsive for unknown reasons
     asyncio.create_task(stepper_processor())
-    # asyncio.create_task(command_processor())
+    asyncio.create_task(temperature_reader_task())  # Start temperature reader
     
     
 
