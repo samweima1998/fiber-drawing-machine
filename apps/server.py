@@ -69,11 +69,22 @@ send_dots_lock = asyncio.Lock()
 async def get_status():
     # Replace these with real sensor readings or variables
     status = {
-        "current_temperature": 123.4,
+        "current_temperature": read_temp() or 0.0,  # Read temperature from sensor
         "current_pressure": 1.23,
         "status": "Idle"
     }
     return status
+
+async def read_temp():
+    device_file = '/sys/bus/w1/devices/28-28-00000fc8aa09/w1_slave'
+    with open(device_file, 'r') as f:
+        lines = f.readlines()
+        if lines[0].strip()[-3:] != 'YES':
+            return None
+        equals_pos = lines[1].find('t=')
+        if equals_pos != -1:
+            temp_string = lines[1][equals_pos+2:]
+            return float(temp_string) / 1000.0
 
 @app.post("/send_data")
 async def receive_dots(batch: DotBatch):
