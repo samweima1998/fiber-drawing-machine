@@ -114,7 +114,7 @@ def read_temp(sensor_path: str = "/sys/bus/w1/devices/28-00000fc8aa09/w1_slave")
 async def get_status():
     status = {
         "current_temperature": latest_temperature,
-        "current_pressure": 1.23,
+        "current_pressure": latest_pressure,
         "status": "Idle"
     }
     return status
