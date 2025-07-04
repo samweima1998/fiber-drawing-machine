@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 import signal
 from fastapi import Response
+import serial
 
 logging.basicConfig(level=logging.INFO)
 
@@ -67,6 +68,23 @@ send_dots_lock = asyncio.Lock()
 
 # Global variable to store the latest temperature
 latest_temperature: float = 0.0
+
+# Global variable to store the latest pressure
+latest_pressure = 0.0
+
+# Initialize serial connection (do this in startup event)
+ser = None
+async def pressure_reader_task():
+    global latest_pressure, shutdown_flag, ser
+    while not shutdown_flag:
+        try:
+            if ser and ser.in_waiting:
+                line = ser.readline().decode().strip()
+                # Expecting a float value from Arduino, e.g. "1.23"
+                latest_pressure = float(line)
+        except Exception as e:
+            logging.error(f"Failed to read pressure: {e}")
+        await asyncio.sleep(0.2)  # Adjust as needed
 
 async def temperature_reader_task(sensor_path: str = "/sys/bus/w1/devices/28-00000fc8aa09/w1_slave"):
     global latest_temperature, shutdown_flag
@@ -204,7 +222,7 @@ async def stepper_processor():
 
 @app.on_event("startup")
 async def startup_event():
-    global command_queue, stepper_queue, shutdown_flag
+    global command_queue, stepper_queue, shutdown_flag, ser
     shutdown_flag = False
     # command_queue = Queue()
     stepper_queue = Queue()
@@ -220,10 +238,17 @@ async def startup_event():
     if is_running(stepper_executable):
         os.system(f"sudo pkill -f {stepper_executable}")
 
+    # Initialize serial connection for pressure sensor
+    try:
+        ser = serial.Serial('/dev/ttyUSB0', 9600, timeout=1)
+        logging.info("Serial connection to pressure sensor established.")
+    except Exception as e:
+        logging.error(f"Failed to establish serial connection: {e}")
+
     # Reversing the order of the two create tasks below causes CS1 to become unresponsive for unknown reasons
     asyncio.create_task(stepper_processor())
     asyncio.create_task(temperature_reader_task())  # Start temperature reader
-    
+    asyncio.create_task(pressure_reader_task())    # Start pressure reader
     
 
     logging.info("Startup event complete. Command and stepper processors initialized.")
@@ -238,6 +263,11 @@ async def shutdown_event():
 
     proc2 = await asyncio.create_subprocess_shell(f"sudo pkill -f {stepper_executable}")
     await proc2.wait()
+
+    # Close serial connection
+    if ser and ser.is_open:
+        ser.close()
+        logging.info("Serial connection closed.")
 
     logging.info("Subprocesses terminated successfully.")
 
