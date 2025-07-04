@@ -240,7 +240,7 @@ async def startup_event():
 
     # Initialize serial connection for pressure sensor
     try:
-        ser = serial.Serial('/dev/ttyUSB0', 9600, timeout=1)
+        ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
         logging.info("Serial connection to pressure sensor established.")
     except Exception as e:
         logging.error(f"Failed to establish serial connection: {e}")
