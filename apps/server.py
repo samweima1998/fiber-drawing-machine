@@ -56,12 +56,15 @@ current_file_path = Path(__file__).resolve()
 # control_executable = current_file_path.parent.parent / "build" / "patternControl"
 stepper_executable = current_file_path.parent.parent / "build" / "stepperMotor"
 
-class DotData(BaseModel):
-    index: int
-    number: int
+class InputData(BaseModel):
+    drawing_temperature: float
+    curing_temperature: float
+    drawing_pressure: float
+    drawing_height: float
+    curing_intensity: float
+    curing_time: float
 
-class DotBatch(BaseModel):
-    dots: List[DotData]
+
 
 # Global lock to prevent overlapping /send_dots executions
 send_dots_lock = asyncio.Lock()
@@ -100,9 +103,9 @@ async def get_status():
     return status
 
 @app.post("/send_data")
-async def receive_dots(batch: DotBatch):
+async def receive_data(data: InputData):
     if send_dots_lock.locked():
-        raise HTTPException(status_code=429, detail="Previous /send_dots still in progress")
+        raise HTTPException(status_code=429, detail="Previous /send_data still in progress")
 
     async with send_dots_lock:
         try:
