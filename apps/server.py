@@ -106,6 +106,12 @@ async def receive_dots(batch: DotBatch):
 
     async with send_dots_lock:
         try:
+            # --- Trigger tare on Arduino ---
+            if ser and ser.is_open:
+                ser.write(b"t\n")
+                ser.flush()
+                logging.info("Sent 't' command to Arduino for tare.")
+
             # Stepper move BACKWARD
             result_future1 = asyncio.get_running_loop().create_future()
             await stepper_queue.put({
