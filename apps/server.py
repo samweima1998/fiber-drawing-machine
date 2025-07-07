@@ -69,46 +69,26 @@ send_dots_lock = asyncio.Lock()
 # Global variable to store the latest temperature
 latest_temperature: float = 0.0
 
-# Global variable to store the latest pressure
+# Global variable to store the latest pressure (temperature-adjusted)
 latest_pressure = 0.0
 
 # Initialize serial connection (do this in startup event)
 ser = None
-async def pressure_reader_task():
-    global latest_pressure, shutdown_flag, ser
+async def sensor_task():
+    global latest_temperature, latest_pressure, shutdown_flag, ser
     while not shutdown_flag:
         try:
             if ser and ser.in_waiting:
                 line = ser.readline().decode().strip()
-                # Expecting a float value from Arduino, e.g. "1.23"
-                latest_pressure = float(line)
+                # Expecting a line like: "20,100.6,93.8"
+                parts = line.split(",")
+                if len(parts) == 3:
+                    temp, raw_pressure, adj_pressure = map(float, parts)
+                    latest_temperature = temp
+                    latest_pressure = adj_pressure
         except Exception as e:
-            logging.error(f"Failed to read pressure: {e}")
+            logging.error(f"Failed to read pressure/temperature: {e}")
         await asyncio.sleep(0.2)  # Adjust as needed
-
-async def temperature_reader_task(sensor_path: str = "/sys/bus/w1/devices/28-00000fc8aa09/w1_slave"):
-    global latest_temperature, shutdown_flag
-    while not shutdown_flag:
-        temp = read_temp(sensor_path)
-        if temp is not None:
-            latest_temperature = temp
-        await asyncio.sleep(1)  # Read every second
-
-def read_temp(sensor_path: str = "/sys/bus/w1/devices/28-00000fc8aa09/w1_slave") -> float:
-    """
-    Reads the temperature from a 1-wire sensor file.
-    Returns the temperature in Celsius, or None if reading fails.
-    """
-    try:
-        with open(sensor_path, "r") as f:
-            lines = f.readlines()
-        if len(lines) < 2 or "YES" not in lines[0]:
-            return None
-        temp_str = lines[1].split("t=")[-1].strip()
-        return float(temp_str) / 1000.0
-    except Exception as e:
-        logging.error(f"Failed to read temperature: {e}")
-        return None
 
 @app.get("/status")
 async def get_status():
@@ -247,8 +227,7 @@ async def startup_event():
 
     # Reversing the order of the two create tasks below causes CS1 to become unresponsive for unknown reasons
     asyncio.create_task(stepper_processor())
-    asyncio.create_task(temperature_reader_task())  # Start temperature reader
-    asyncio.create_task(pressure_reader_task())    # Start pressure reader
+    asyncio.create_task(sensor_task())    # Start sensor
     
 
     logging.info("Startup event complete. Command and stepper processors initialized.")
