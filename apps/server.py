@@ -212,15 +212,12 @@ async def startup_event():
         return os.system(f"pgrep -f {executable} > /dev/null") == 0
 
     # Kill only if running
-    # if is_running(control_executable):
-    #     os.system(f"sudo pkill -f {control_executable}")
-
     if is_running(stepper_executable):
         os.system(f"sudo pkill -f {stepper_executable}")
 
     # Initialize serial connection for pressure sensor
     try:
-        ser = serial.Serial('/dev/ttyACM0', 115200, timeout=1)
+        ser = serial.Serial('/dev/serial/by-id/usb-Arduino_LLC_Arduino_NANO_33_IoT_7CB63C1050304D48502E3120FF191434-if00', 115200, timeout=1)
         logging.info("Serial connection to pressure sensor established.")
     except Exception as e:
         logging.error(f"Failed to establish serial connection: {e}")
@@ -260,16 +257,6 @@ svelte_frontend = current_file_path.parent.parent / "frontend" / "build"
 async def serve_svelte():
     return FileResponse(svelte_frontend / "index.html")
 
-# @app.post("/execute_batch")
-# async def execute_batch_commands(batch: CommandBatch):
-#     results = []
-#     for cmd in batch.commands:
-#         result_future = asyncio.get_running_loop().create_future()
-#         await command_queue.put({"cs_pin": cmd.cs_pin, "args": cmd.args, "result": result_future})
-#         output = await result_future
-#         results.append({"cs_pin": cmd.cs_pin, "output": output})
-#     return {"status": True, "results": results}
-
 @app.post("/stepper")
 async def control_stepper(batch: StepperCommandBatch):
     results = []
@@ -283,7 +270,6 @@ async def control_stepper(batch: StepperCommandBatch):
         results.append(result_future)
     await asyncio.gather(*results)
     return {"status": True, "results": results}
-
 
 # Serve the static files (Svelte app)
 # Ensure these files are mounted last, otherwise POST requests may fail
