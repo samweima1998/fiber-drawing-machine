@@ -111,9 +111,24 @@ async def receive_data(data: InputData):
         try:
             # --- Trigger tare on Arduino ---
             if ser and ser.is_open:
+                ser.reset_input_buffer()  # Clear any old data
                 ser.write(b"t\n")
                 ser.flush()
                 logging.info("Sent 't' command to Arduino for tare.")
+
+                # Wait for "# TARE_OK" confirmation (timeout after 5 seconds)
+                import time
+                start_time = time.time()
+                while True:
+                    if ser.in_waiting:
+                        line = ser.readline().decode(errors="ignore").strip()
+                        logging.info(f"Arduino response: {line}")
+                        if "# TARE_OK" in line:
+                            logging.info("Tare confirmed by Arduino.")
+                            break
+                    if time.time() - start_time > 5:
+                        raise TimeoutError("Timeout waiting for Arduino tare confirmation.")
+                    await asyncio.sleep(0.05)
 
             # Stepper move BACKWARD
             result_future1 = asyncio.get_running_loop().create_future()
