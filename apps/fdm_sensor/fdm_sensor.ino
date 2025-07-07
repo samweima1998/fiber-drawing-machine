@@ -98,7 +98,7 @@ void loop() {
   pollTemperature();
 
   // -------- Load‑cell reading --------
-  float raw_g = scale.get_units(5);          // grams
+  float raw_g = -scale.get_units(5);          // grams
 
   // -------- Compensation (optional) ---
   float raw_kg       = raw_g / 1000.0f;
