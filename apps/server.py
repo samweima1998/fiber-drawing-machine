@@ -130,6 +130,17 @@ async def receive_data(data: InputData):
                         raise TimeoutError("Timeout waiting for Arduino tare confirmation.")
                     await asyncio.sleep(0.05)
 
+            while latest_pressure > -500:
+                # Stepper move FORWARD
+                result_future2 = asyncio.get_running_loop().create_future()
+                await stepper_queue.put({
+                    "direction": "FORWARD"[:],
+                    "steps": int(20000),
+                    "result": result_future2
+                })
+                await result_future2
+                logging.info("Stepper FORWARD complete.")
+
             # Stepper move BACKWARD
             result_future1 = asyncio.get_running_loop().create_future()
             await stepper_queue.put({
@@ -140,15 +151,6 @@ async def receive_data(data: InputData):
             await result_future1
             logging.info("Stepper BACKWARD complete.")
            
-            # Stepper move FORWARD
-            result_future2 = asyncio.get_running_loop().create_future()
-            await stepper_queue.put({
-                "direction": "FORWARD"[:],
-                "steps": int(20000),
-                "result": result_future2
-            })
-            await result_future2
-            logging.info("Stepper FORWARD complete.")
 
         except Exception as e:
             logging.error(f"Error in /send_dots: {e}")
