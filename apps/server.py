@@ -140,7 +140,7 @@ async def receive_data(data: InputData):
                         raise TimeoutError("Timeout waiting for Arduino tare confirmation.")
                     await asyncio.sleep(0.05)
 
-            while latest_pressure > -20:
+            while latest_pressure > 100:
                 # Stepper move FORWARD
                 result_future2 = asyncio.get_running_loop().create_future()
                 await stepper_queue.put({
