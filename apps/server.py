@@ -109,6 +109,16 @@ async def receive_data(data: InputData):
 
     async with send_dots_lock:
         try:
+            # Stepper move BACKWARD
+            result_future1 = asyncio.get_running_loop().create_future()
+            await stepper_queue.put({
+                "direction": "BACKWARD"[:],
+                "steps": int(200000),
+                "result": result_future1
+            })
+            await result_future1
+            logging.info("Stepper BACKWARD complete.")
+
             # --- Trigger tare on Arduino ---
             if ser and ser.is_open:
                 ser.reset_input_buffer()  # Clear any old data
@@ -130,7 +140,7 @@ async def receive_data(data: InputData):
                         raise TimeoutError("Timeout waiting for Arduino tare confirmation.")
                     await asyncio.sleep(0.05)
 
-            while latest_pressure > -50:
+            while latest_pressure > -20:
                 # Stepper move FORWARD
                 result_future2 = asyncio.get_running_loop().create_future()
                 await stepper_queue.put({
