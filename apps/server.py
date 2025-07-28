@@ -119,52 +119,52 @@ async def receive_data(data: InputData):
             # await result_future1
             # logging.info("Stepper BACKWARD complete.")
 
-            # # --- Trigger tare on Arduino ---
-            # if ser and ser.is_open:
-            #     ser.reset_input_buffer()  # Clear any old data
-            #     ser.write(b"t\n")
-            #     ser.flush()
-            #     logging.info("Sent 't' command to Arduino for tare.")
+            # --- Trigger tare on Arduino ---
+            if ser and ser.is_open:
+                ser.reset_input_buffer()  # Clear any old data
+                ser.write(b"t\n")
+                ser.flush()
+                logging.info("Sent 't' command to Arduino for tare.")
 
-            #     # Wait for "# TARE_OK" confirmation (timeout after 5 seconds)
-            #     import time
-            #     start_time = time.time()
-            #     while True:
-            #         if ser.in_waiting:
-            #             line = ser.readline().decode(errors="ignore").strip()
-            #             logging.info(f"Arduino response: {line}")
-            #             if "# TARE_OK" in line:
-            #                 logging.info("Tare confirmed by Arduino.")
-            #                 break
-            #         if time.time() - start_time > 5:
-            #             raise TimeoutError("Timeout waiting for Arduino tare confirmation.")
-            #         await asyncio.sleep(0.05)
+                # Wait for "# TARE_OK" confirmation (timeout after 5 seconds)
+                import time
+                start_time = time.time()
+                while True:
+                    if ser.in_waiting:
+                        line = ser.readline().decode(errors="ignore").strip()
+                        logging.info(f"Arduino response: {line}")
+                        if "# TARE_OK" in line:
+                            logging.info("Tare confirmed by Arduino.")
+                            break
+                    if time.time() - start_time > 5:
+                        raise TimeoutError("Timeout waiting for Arduino tare confirmation.")
+                    await asyncio.sleep(0.05)
 
-            # while latest_pressure > 100:
-            #     # Stepper move FORWARD
-            #     result_future2 = asyncio.get_running_loop().create_future()
-            #     await stepper_queue.put({
-            #         "direction": "FORWARD"[:],
-            #         "steps": int(20000),
-            #         "result": result_future2
-            #     })
-            #     await result_future2
-            #     logging.info("Stepper FORWARD complete.")
+            while latest_pressure > -10:
+                # Stepper move FORWARD
+                result_future2 = asyncio.get_running_loop().create_future()
+                await stepper_queue.put({
+                    "direction": "FORWARD"[:],
+                    "steps": int(20000),
+                    "result": result_future2
+                })
+                await result_future2
+                logging.info("Stepper FORWARD complete.")
 
-            # Stepper move FORWARD  
-            result_future2 = asyncio.get_running_loop().create_future()
-            await stepper_queue.put({
-                "direction": "FORWARD"[:],
-                "steps": int(20000),
-                "result": result_future2
-            })
-            await result_future2
-            logging.info("Stepper FORWARD complete.")
+            # # Stepper move FORWARD  
+            # result_future2 = asyncio.get_running_loop().create_future()
+            # await stepper_queue.put({
+            #     "direction": "FORWARD"[:],
+            #     "steps": int(20000),
+            #     "result": result_future2
+            # })
+            # await result_future2
+            # logging.info("Stepper FORWARD complete.")
             # Stepper move BACKWARD
             result_future1 = asyncio.get_running_loop().create_future()
             await stepper_queue.put({
                 "direction": "BACKWARD"[:],
-                "steps": int(20000),
+                "steps": int(40000),
                 "result": result_future1
             })
             await result_future1

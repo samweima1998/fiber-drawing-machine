@@ -45,7 +45,7 @@ DallasTemperature ds18b20(&oneWire);
 
 unsigned long nextTempPoll = 0;   // scheduler for DS18B20
 float temperatureC = NAN;         // last good temp value
-
+float raw_g_old = 0;
 void setup() {
   Serial.begin(115200);
   while (!Serial) {/*wait for USB*/}
@@ -98,10 +98,10 @@ void loop() {
   pollTemperature();
 
   // -------- Load‑cell reading --------
-  float raw_g = -scale.get_units(5);          // grams
-
+  float raw_g = scale.get_units(5);          // grams
+  float raw_g_average = (raw_g+raw_g_old)/2;
   // -------- Compensation (optional) ---
-  float raw_kg       = raw_g / 1000.0f;
+  float raw_kg       = raw_g_average / 1000.0f;
   float zero_corr_kg = TC_OFFSET_KG * (temperatureC - TEMP_ZERO_PT);
   float span_corr    = 1.0f + TC_SPAN_REL * (temperatureC - TEMP_ZERO_PT);
   float comp_kg      = (raw_kg - zero_corr_kg) / span_corr;
@@ -109,8 +109,9 @@ void loop() {
 
   // -------- Output line ---------------
   Serial.print(temperatureC, 2); Serial.print(',');
-  Serial.print(raw_g, 1);        Serial.print(',');
-  Serial.println(comp_g, 1);
+  Serial.print(raw_g_average, 0);        Serial.print(',');
+  Serial.println(comp_g, 0);
 
-  delay(100);   // ~10 Hz output (adjust if needed)
+  raw_g_old = raw_g;
+  // delay(100);   // ~10 Hz output (adjust if needed)
 }
