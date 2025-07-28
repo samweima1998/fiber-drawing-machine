@@ -6,6 +6,7 @@
 #include <chrono>
 #include <csignal>
 #include <cstdlib>
+#include <atomic>
 
 #define CHIP_NAME "gpiochip0" // Typical on Raspberry Pi
 #define DIR_PIN 25
@@ -20,12 +21,26 @@ gpiod_line* dir_line = nullptr;
 gpiod_line* step_line = nullptr;
 gpiod_line* enable_line = nullptr;
 
+// Add global atomic flag and thread handle
+std::atomic<bool> continuous_running(false);
+std::thread continuous_thread;
+
 void pulseStepPin(gpiod_line* step_line, int steps) {
     for (int i = 0; i < steps; ++i) {
         gpiod_line_set_value(step_line, 1);
         std::this_thread::sleep_for(std::chrono::microseconds(20));
         gpiod_line_set_value(step_line, 0);
         std::this_thread::sleep_for(std::chrono::microseconds(100));
+    }
+}
+
+// Function to send continuous step pulses
+void continuousStep(gpiod_line* step_line, int direction, int interval_us) {
+    while (continuous_running) {
+        gpiod_line_set_value(step_line, 1);
+        std::this_thread::sleep_for(std::chrono::microseconds(20));
+        gpiod_line_set_value(step_line, 0);
+        std::this_thread::sleep_for(std::chrono::microseconds(interval_us));
     }
 }
 
@@ -63,10 +78,56 @@ int main() {
         }
 
         std::istringstream input_stream(input);
-        std::string direction_str;
-        int steps;
+        std::string command;
+        input_stream >> command;
 
-        if (!(input_stream >> direction_str >> steps)) {
+        if (command == "START") {
+            std::string direction_str;
+            int interval_us = 100; // default interval
+            input_stream >> direction_str >> interval_us;
+
+            Direction dir;
+            if (direction_str == "FORWARD") dir = FORWARD;
+            else if (direction_str == "BACKWARD") dir = BACKWARD;
+            else {
+                std::cout << "ERROR: Invalid direction" << std::endl;
+                std::cout << "DONE" << std::endl;
+                std::cout.flush();
+                continue;
+            }
+
+            if (!continuous_running) {
+                continuous_running = true;
+                gpiod_line_set_value(enable_line, 0);
+                gpiod_line_set_value(dir_line, dir == FORWARD ? 1 : 0);
+                continuous_thread = std::thread(continuousStep, step_line, dir, interval_us);
+                std::cout << "SUCCESS: Started continuous stepping in " << direction_str << std::endl;
+            } else {
+                std::cout << "ERROR: Continuous stepping already running" << std::endl;
+            }
+            std::cout << "DONE" << std::endl;
+            std::cout.flush();
+            continue;
+        }
+
+        if (command == "STOP") {
+            if (continuous_running) {
+                continuous_running = false;
+                if (continuous_thread.joinable()) continuous_thread.join();
+                gpiod_line_set_value(enable_line, 1);
+                std::cout << "SUCCESS: Stopped continuous stepping" << std::endl;
+            } else {
+                std::cout << "ERROR: Continuous stepping not running" << std::endl;
+            }
+            std::cout << "DONE" << std::endl;
+            std::cout.flush();
+            continue;
+        }
+
+        // ...existing step command parsing...
+        std::string direction_str = command;
+        int steps;
+        if (!(input_stream >> steps)) {
             std::cout << "ERROR: Invalid command format" << std::endl;
             std::cout << "DONE" << std::endl;
             std::cout.flush();
@@ -98,6 +159,8 @@ int main() {
     }
 
     // Final cleanup
+    continuous_running = false;
+    if (continuous_thread.joinable()) continuous_thread.join();
     gpiod_chip_close(chip);
     return 0;
 }

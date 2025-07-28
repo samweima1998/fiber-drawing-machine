@@ -22,7 +22,7 @@
 
 # Old versions
 old*
-
+*_old*
 # Svelte frontend, except build
 frontend/*
 !frontend/build/
