@@ -140,16 +140,42 @@ async def receive_data(data: InputData):
                         raise TimeoutError("Timeout waiting for Arduino tare confirmation.")
                     await asyncio.sleep(0.05)
 
+            # while latest_pressure > -10:
+            #     # Stepper move FORWARD
+            #     result_future2 = asyncio.get_running_loop().create_future()
+            #     await stepper_queue.put({
+            #         "direction": "FORWARD"[:],
+            #         "steps": int(20000),
+            #         "result": result_future2
+            #     })
+            #     await result_future2
+            #     logging.info("Stepper FORWARD complete.")
+            
+            # Start continuous stepping
+            result_future_start = asyncio.get_running_loop().create_future()
+            await stepper_queue.put({
+                "direction": "START",
+                "steps": 0,  # steps not used for START
+                "interval_us": 100,  # you can adjust interval if needed
+                "direction_str": "FORWARD",
+                "result": result_future_start
+            })
+            await result_future_start
+            logging.info("Stepper continuous FORWARD started.")
+
+            # Wait until pressure condition is met
             while latest_pressure > -10:
-                # Stepper move FORWARD
-                result_future2 = asyncio.get_running_loop().create_future()
-                await stepper_queue.put({
-                    "direction": "FORWARD"[:],
-                    "steps": int(20000),
-                    "result": result_future2
-                })
-                await result_future2
-                logging.info("Stepper FORWARD complete.")
+                await asyncio.sleep(0.1)
+
+            # Stop continuous stepping
+            result_future_stop = asyncio.get_running_loop().create_future()
+            await stepper_queue.put({
+                "direction": "STOP",
+                "steps": 0,
+                "result": result_future_stop
+            })
+            await result_future_stop
+            logging.info("Stepper continuous FORWARD stopped.")
 
             # # Stepper move FORWARD  
             # result_future2 = asyncio.get_running_loop().create_future()
