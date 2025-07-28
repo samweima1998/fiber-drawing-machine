@@ -1,7 +1,7 @@
 # ---------- toolchain & flags -----------------------------------
 CXX      := g++
 CXXFLAGS := -std=c++20 -O2 -Wall -Wextra -pedantic
-LDFLAGS  := -lgpiod
+LDFLAGS  := -lgpiod -lpthread
 # ----------------------------------------------------------------
 
 # Target directory for the binaries ( ../build relative to src/)
