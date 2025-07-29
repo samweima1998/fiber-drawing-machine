@@ -38,8 +38,10 @@ app.add_middleware(
 #     commands: List[Command]
 
 class StepperCommand(BaseModel):
-    direction: str  # e.g., "left" or "right"
-    steps: int
+    command: str  # "START", "STOP", "MOVE"
+    direction: Optional[str] = None  # "FORWARD" or "BACKWARD"
+    steps: Optional[int] = None      # Only for MOVE
+    interval_us: Optional[int] = None  # Only for START
 
 class StepperCommandBatch(BaseModel):
     commands: List[StepperCommand]
@@ -154,14 +156,12 @@ async def receive_data(data: InputData):
             # Start continuous stepping
             result_future_start = asyncio.get_running_loop().create_future()
             await stepper_queue.put({
-                "direction": "START",
-                "steps": 0,  # not used for START
-                "direction_str": "FORWARD",  # or "BACKWARD" if needed
-                "interval_us": 100,          # adjust as needed
+                "command": "START",
+                "direction": "FORWARD",
+                "interval_us": 100,
                 "result": result_future_start
             })
             await result_future_start
-            logging.info("Stepper continuous FORWARD started.")
 
             # Wait until pressure condition is met
             while latest_pressure > -10:
@@ -170,31 +170,20 @@ async def receive_data(data: InputData):
             # Stop continuous stepping
             result_future_stop = asyncio.get_running_loop().create_future()
             await stepper_queue.put({
-                "direction": "STOP",
-                "steps": 0,
+                "command": "STOP",
                 "result": result_future_stop
             })
             await result_future_stop
-            logging.info("Stepper continuous FORWARD stopped.")
 
-
-            # # Stepper move FORWARD  
-            # result_future2 = asyncio.get_running_loop().create_future()
-            # await stepper_queue.put({
-            #     "direction": "FORWARD"[:],
-            #     "steps": int(20000),
-            #     "result": result_future2
-            # })
-            # await result_future2
-            # logging.info("Stepper FORWARD complete.")
-            # Stepper move BACKWARD
-            result_future1 = asyncio.get_running_loop().create_future()
+            # Move 40000 steps backward
+            result_future_move = asyncio.get_running_loop().create_future()
             await stepper_queue.put({
-                "direction": "BACKWARD"[:],
-                "steps": int(40000),
-                "result": result_future1
+                "command": "MOVE",
+                "direction": "BACKWARD",
+                "steps": 40000,
+                "result": result_future_move
             })
-            await result_future1
+            await result_future_move
             logging.info("Stepper BACKWARD complete.")
            
 
@@ -228,19 +217,17 @@ async def stepper_processor():
                     if process.returncode is not None:
                         raise RuntimeError("Stepper subprocess terminated before executing command.")
 
-                    # Handle continuous stepping commands
-                    if command["direction"] == "START":
-                        # Use direction_str and interval_us from the command
-                        command_input = f"START {command['direction_str']} {command['interval_us']}\n"
-                    elif command["direction"] == "STOP":
-                        command_input = "STOP\n"
+                    if command["command"] == "START":
+                        cmd_str = f"START {command['direction']} {command.get('interval_us', 100)}\n"
+                    elif command["command"] == "STOP":
+                        cmd_str = "STOP\n"
+                    elif command["command"] == "MOVE":
+                        cmd_str = f"{command['direction']} {command['steps']}\n"
                     else:
-                        # Default: single move
-                        command_input = f"{command['direction']} {command['steps']}\n"
+                        raise ValueError(f"Unknown stepper command: {command['command']}")
 
-                    logging.info(f"Sent to stepper: {command_input.strip()}")
-
-                    process.stdin.write(command_input.encode())
+                    logging.info(f"Sent to stepper: {cmd_str.strip()}")
+                    process.stdin.write(cmd_str.encode())
                     await process.stdin.drain()
 
                     # Wait for DONE
@@ -338,19 +325,19 @@ svelte_frontend = current_file_path.parent.parent / "frontend" / "build"
 async def serve_svelte():
     return FileResponse(svelte_frontend / "index.html")
 
-@app.post("/stepper")
-async def control_stepper(batch: StepperCommandBatch):
-    results = []
-    for cmd in batch.commands:
-        result_future = asyncio.get_running_loop().create_future()
-        await stepper_queue.put({
-            "direction": str(cmd.direction),  # force string copy
-            "steps": int(cmd.steps),          # force int copy
-            "result": result_future
-        })
-        results.append(result_future)
-    await asyncio.gather(*results)
-    return {"status": True, "results": results}
+# @app.post("/stepper")
+# async def control_stepper(batch: StepperCommandBatch):
+#     results = []
+#     for cmd in batch.commands:
+#         result_future = asyncio.get_running_loop().create_future()
+#         await stepper_queue.put({
+#             "direction": str(cmd.direction),  # force string copy
+#             "steps": int(cmd.steps),          # force int copy
+#             "result": result_future
+#         })
+#         results.append(result_future)
+#     await asyncio.gather(*results)
+#     return {"status": True, "results": results}
 
 # Serve the static files (Svelte app)
 # Ensure these files are mounted last, otherwise POST requests may fail
