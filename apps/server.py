@@ -154,10 +154,10 @@ async def receive_data(data: InputData):
             # Start continuous stepping
             result_future_start = asyncio.get_running_loop().create_future()
             await stepper_queue.put({
-                "direction": "START",
-                "steps": 0,  # steps not used for START
-                "interval_us": 100,  # you can adjust interval if needed
+                "command": "START",
+                # "steps": 0,  # steps not used for START
                 "direction_str": "FORWARD",
+                "interval_us": 100,  # you can adjust interval if needed
                 "result": result_future_start
             })
             await result_future_start
@@ -170,7 +170,7 @@ async def receive_data(data: InputData):
             # Stop continuous stepping
             result_future_stop = asyncio.get_running_loop().create_future()
             await stepper_queue.put({
-                "direction": "STOP",
+                "command": "STOP",
                 "steps": 0,
                 "result": result_future_stop
             })
