@@ -109,6 +109,7 @@ async def get_status():
 
 @app.post("/send_data")
 async def receive_data(data: InputData):
+    global latest_status, latest_temperature, latest_pressure
     if send_dots_lock.locked():
         raise HTTPException(status_code=429, detail="Previous /send_data still in progress")
 
