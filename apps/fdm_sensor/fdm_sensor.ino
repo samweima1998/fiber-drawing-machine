@@ -27,14 +27,15 @@
 
 // ----------- user‑configurable constants ------------
 const byte HX_DOUT_PIN = 2;
-const byte HX_SCK_PIN  = 3;
+const byte HX_SCK_PIN = 3;
 const byte ONEWIRE_PIN = 4;
+const byte LED_PIN = 16; // curing LED pin
 
 // Calibration (edit for your hardware)
-const float CALIBRATION_FACTOR = 18.5f;   // scale factor for grams
-const float TEMP_ZERO_PT  = 25.0f;        // reference °C for compensation
-const float TC_OFFSET_KG  = 0.000f;       // kg zero drift / °C
-const float TC_SPAN_REL   = 0.0000f;     // relative span drift / °C
+const float CALIBRATION_FACTOR = 18.5f; // scale factor for grams
+const float TEMP_ZERO_PT = 25.0f;       // reference °C for compensation
+const float TC_OFFSET_KG = 0.000f;      // kg zero drift / °C
+const float TC_SPAN_REL = 0.0000f;      // relative span drift / °C
 
 const unsigned long TEMP_INTERVAL_MS = 1000; // 1 s between temp polls
 // -----------------------------------------------------
@@ -43,16 +44,19 @@ HX711 scale;
 OneWire oneWire(ONEWIRE_PIN);
 DallasTemperature ds18b20(&oneWire);
 
-unsigned long nextTempPoll = 0;   // scheduler for DS18B20
-float temperatureC = NAN;         // last good temp value
+unsigned long nextTempPoll = 0; // scheduler for DS18B20
+float temperatureC = NAN;       // last good temp value
 float raw_g_old = 0;
-void setup() {
+void setup()
+{
   Serial.begin(115200);
-  while (!Serial) {/*wait for USB*/}
+  while (!Serial)
+  { /*wait for USB*/
+  }
 
   // ---- DS18B20 init ----
   ds18b20.begin();
-  ds18b20.setWaitForConversion(false);    // non‑blocking mode
+  ds18b20.setWaitForConversion(false); // non‑blocking mode
   nextTempPoll = millis();
 
   // ---- HX711 init ----
@@ -60,8 +64,12 @@ void setup() {
   scale.set_scale(CALIBRATION_FACTOR);
   scale.tare();
 
+  // -- Curing LED pin setup ----
+  pinMode(LED_PIN, OUTPUT);
+  analogWrite(LED_PIN, 0); // turn off curing LED
+
   // ---- Serial protocol ----
-  Serial.setTimeout(5);     // tiny timeout for readStringUntil
+  Serial.setTimeout(5); // tiny timeout for readStringUntil
   // Serial.println(F("# temp_C,raw_g,comp_g"));
   // Serial.println(F("# send 'T' or 'tare' to zero"));
 }
@@ -69,23 +77,43 @@ void setup() {
 // ---------------------------------------------------------------------------
 //  helper: handle commands from Raspberry Pi
 // ---------------------------------------------------------------------------
-void handleSerialCommands() {
-  if (!Serial.available()) return;
+void handleSerialCommands()
+{
+  if (!Serial.available())
+    return;
   String cmd = Serial.readStringUntil('\n');
   cmd.trim();
   cmd.toLowerCase();
-  if (cmd == "t" || cmd == "tare") {
+  if (cmd == "t" || cmd == "tare")
+  {
     scale.tare();
     Serial.println(F("# TARE_OK"));
+  }
+  if (cmd.startsWith("start curing")) {
+    
+    int intensity = 100; // default
+    int sep = cmd.lastIndexOf(' ');
+    if (sep > 0 && sep + 1 < cmd.length()) {
+      intensity = cmd.substring(sep + 1).toInt();
+    }
+    analogWrite(LED_PIN, map(intensity, 0, 100, 0, 255));
+    Serial.println(F("# START_CURING"));
+  }
+  if (cmd == "stop curing")
+  {
+    analogWrite(LED_PIN, 0); // turn off curing LED
+    Serial.println(F("# STOP_CURING"));
   }
 }
 
 // ---------------------------------------------------------------------------
 //  helper: non‑blocking temperature polling
 // ---------------------------------------------------------------------------
-void pollTemperature() {
+void pollTemperature()
+{
   unsigned long now = millis();
-  if (now >= nextTempPoll) {
+  if (now >= nextTempPoll)
+  {
     // start new conversion and grab the result of the previous one
     ds18b20.requestTemperatures();
     temperatureC = ds18b20.getTempCByIndex(0);
@@ -93,23 +121,26 @@ void pollTemperature() {
   }
 }
 
-void loop() {
+void loop()
+{
   handleSerialCommands();
   pollTemperature();
 
   // -------- Load‑cell reading --------
-  float raw_g = scale.get_units(5);          // grams
-  float raw_g_average = (raw_g+raw_g_old)/2;
+  float raw_g = scale.get_units(5); // grams
+  float raw_g_average = (raw_g + raw_g_old) / 2;
   // -------- Compensation (optional) ---
-  float raw_kg       = raw_g_average / 1000.0f;
+  float raw_kg = raw_g_average / 1000.0f;
   float zero_corr_kg = TC_OFFSET_KG * (temperatureC - TEMP_ZERO_PT);
-  float span_corr    = 1.0f + TC_SPAN_REL * (temperatureC - TEMP_ZERO_PT);
-  float comp_kg      = (raw_kg - zero_corr_kg) / span_corr;
-  float comp_g       = comp_kg * 1000.0f;
+  float span_corr = 1.0f + TC_SPAN_REL * (temperatureC - TEMP_ZERO_PT);
+  float comp_kg = (raw_kg - zero_corr_kg) / span_corr;
+  float comp_g = comp_kg * 1000.0f;
 
   // -------- Output line ---------------
-  Serial.print(temperatureC, 2); Serial.print(',');
-  Serial.print(raw_g_average, 0);        Serial.print(',');
+  Serial.print(temperatureC, 2);
+  Serial.print(',');
+  Serial.print(raw_g_average, 0);
+  Serial.print(',');
   Serial.println(comp_g, 0);
 
   raw_g_old = raw_g;

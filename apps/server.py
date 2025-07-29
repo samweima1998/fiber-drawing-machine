@@ -188,10 +188,24 @@ async def receive_data(data: InputData):
             while abs(latest_temperature - data.curing_temperature) > 0.5:
                 await asyncio.sleep(0.1)
             logging.info("curing temperature reached.")
-           
+
+            # Start curing
+            if ser and ser.is_open:
+                ser.reset_input_buffer()  # Clear any old data
+                ser.write(f"start curing {data.curing_intensity}\n".encode())
+                ser.flush()
+                logging.info(f"Sent 'start curing {data.curing_intensity}' command to Arduino.")
+                latest_status = "curing"
+            await asyncio.sleep(data.curing_time)  # Wait for curing time
+            if ser and ser.is_open:
+                ser.reset_input_buffer()  # Clear any old data
+                ser.write(b"stop curing\n")
+                ser.flush()
+                logging.info("Sent 'stop curing' command to Arduino.")
+                latest_status = "Curing complete"
 
         except Exception as e:
-            logging.error(f"Error in /send_dots: {e}")
+            logging.error(f"Error in /send_data: {e}")
             return {"status": "error", "message": str(e)}
     
 
