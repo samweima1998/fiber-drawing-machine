@@ -165,7 +165,7 @@ async def receive_data(data: InputData):
 
             # Wait until pressure condition is met
             while latest_pressure > -10:
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.01)
 
             # Stop continuous stepping
             result_future_stop = asyncio.get_running_loop().create_future()
