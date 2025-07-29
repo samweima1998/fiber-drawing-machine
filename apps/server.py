@@ -93,7 +93,7 @@ async def sensor_task():
                     latest_pressure = adj_pressure
         except Exception as e:
             logging.error(f"Failed to read pressure/temperature: {e}")
-        await asyncio.sleep(0.2)  # Adjust as needed
+        await asyncio.sleep(0.1)  # Adjust as needed
 
 @app.get("/status")
 async def get_status():
@@ -165,7 +165,7 @@ async def receive_data(data: InputData):
 
             # Wait until pressure condition is met
             while latest_pressure > -10:
-                await asyncio.sleep(0.01)
+                await asyncio.sleep(0.1)
 
             # Stop continuous stepping
             result_future_stop = asyncio.get_running_loop().create_future()
@@ -175,12 +175,12 @@ async def receive_data(data: InputData):
             })
             await result_future_stop
 
-            # Move 40000 steps backward
+            # Move 400000 steps backward
             result_future_move = asyncio.get_running_loop().create_future()
             await stepper_queue.put({
                 "command": "MOVE",
                 "direction": "BACKWARD",
-                "steps": 40000,
+                "steps": 400000,
                 "result": result_future_move
             })
             await result_future_move
