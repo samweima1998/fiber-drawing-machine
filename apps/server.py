@@ -68,8 +68,8 @@ class InputData(BaseModel):
 
 
 
-# Global lock to prevent overlapping /send_dots executions
-send_dots_lock = asyncio.Lock()
+# Global lock to prevent overlapping /send_data executions
+send_data_lock = asyncio.Lock()
 
 # Global variable to store the latest temperature
 latest_temperature: float = 0.0
@@ -110,20 +110,16 @@ async def get_status():
 @app.post("/send_data")
 async def receive_data(data: InputData):
     global latest_status, latest_temperature, latest_pressure
-    if send_dots_lock.locked():
+    if send_data_lock.locked():
         raise HTTPException(status_code=429, detail="Previous /send_data still in progress")
 
-    async with send_dots_lock:
+    async with send_data_lock:
         try:
-            # # Stepper move BACKWARD
-            # result_future1 = asyncio.get_running_loop().create_future()
-            # await stepper_queue.put({
-            #     "direction": "BACKWARD"[:],
-            #     "steps": int(200000),
-            #     "result": result_future1
-            # })
-            # await result_future1
-            # logging.info("Stepper BACKWARD complete.")
+            # Wait until temperature condition is met
+            latest_status = "Waiting for drawing temperature"
+            while abs(latest_temperature - data.drawing_temperature) > 0.5:
+                await asyncio.sleep(0.1)
+            logging.info("Drawing temperature reached.")
 
             # --- Trigger tare on Arduino ---
             if ser and ser.is_open:
@@ -186,6 +182,12 @@ async def receive_data(data: InputData):
             await result_future_move
             logging.info("Drawing complete.")
             latest_status = "Drawing complete"
+
+            # Wait until temperature condition is met
+            latest_status = "Waiting for curing temperature"
+            while abs(latest_temperature - data.curing_temperature) > 0.5:
+                await asyncio.sleep(0.1)
+            logging.info("curing temperature reached.")
            
 
         except Exception as e:
