@@ -154,10 +154,10 @@ async def receive_data(data: InputData):
             # Start continuous stepping
             result_future_start = asyncio.get_running_loop().create_future()
             await stepper_queue.put({
-                "command": "START",
-                # "steps": 0,  # steps not used for START
-                "direction_str": "FORWARD",
-                "interval_us": 100,  # you can adjust interval if needed
+                "direction": "START",
+                "steps": 0,  # not used for START
+                "direction_str": "FORWARD",  # or "BACKWARD" if needed
+                "interval_us": 100,          # adjust as needed
                 "result": result_future_start
             })
             await result_future_start
@@ -170,12 +170,13 @@ async def receive_data(data: InputData):
             # Stop continuous stepping
             result_future_stop = asyncio.get_running_loop().create_future()
             await stepper_queue.put({
-                "command": "STOP",
+                "direction": "STOP",
                 "steps": 0,
                 "result": result_future_stop
             })
             await result_future_stop
             logging.info("Stepper continuous FORWARD stopped.")
+
 
             # # Stepper move FORWARD  
             # result_future2 = asyncio.get_running_loop().create_future()
@@ -227,7 +228,16 @@ async def stepper_processor():
                     if process.returncode is not None:
                         raise RuntimeError("Stepper subprocess terminated before executing command.")
 
-                    command_input = f"{command['direction']} {command['steps']}\n"
+                    # Handle continuous stepping commands
+                    if command["direction"] == "START":
+                        # Use direction_str and interval_us from the command
+                        command_input = f"START {command['direction_str']} {command['interval_us']}\n"
+                    elif command["direction"] == "STOP":
+                        command_input = "STOP\n"
+                    else:
+                        # Default: single move
+                        command_input = f"{command['direction']} {command['steps']}\n"
+
                     logging.info(f"Sent to stepper: {command_input.strip()}")
 
                     process.stdin.write(command_input.encode())
