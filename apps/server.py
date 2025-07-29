@@ -77,6 +77,9 @@ latest_temperature: float = 0.0
 # Global variable to store the latest pressure (temperature-adjusted)
 latest_pressure = 0.0
 
+# Global variable to store the latest status
+latest_status: str = "Idle"
+
 # Initialize serial connection (do this in startup event)
 ser = None
 async def sensor_task():
@@ -100,7 +103,7 @@ async def get_status():
     status = {
         "current_temperature": latest_temperature,
         "current_pressure": latest_pressure,
-        "status": "Idle"
+        "status": latest_status,
     }
     return status
 
@@ -127,6 +130,7 @@ async def receive_data(data: InputData):
                 ser.write(b"t\n")
                 ser.flush()
                 logging.info("Sent 't' command to Arduino for tare.")
+                latest_status = "Taring"
 
                 # Wait for "# TARE_OK" confirmation (timeout after 5 seconds)
                 import time
@@ -142,16 +146,6 @@ async def receive_data(data: InputData):
                         raise TimeoutError("Timeout waiting for Arduino tare confirmation.")
                     await asyncio.sleep(0.05)
 
-            # while latest_pressure > -10:
-            #     # Stepper move FORWARD
-            #     result_future2 = asyncio.get_running_loop().create_future()
-            #     await stepper_queue.put({
-            #         "direction": "FORWARD"[:],
-            #         "steps": int(20000),
-            #         "result": result_future2
-            #     })
-            #     await result_future2
-            #     logging.info("Stepper FORWARD complete.")
             
             # Start continuous stepping
             result_future_start = asyncio.get_running_loop().create_future()
@@ -162,11 +156,13 @@ async def receive_data(data: InputData):
                 "result": result_future_start
             })
             await result_future_start
+            latest_status = "Approaching contact"
 
             # Wait until pressure condition is met
             while latest_pressure > -10:
                 await asyncio.sleep(0.1)
             logging.info("Contact detected.")
+            
 
             # Stop continuous stepping
             result_future_stop = asyncio.get_running_loop().create_future()
@@ -175,6 +171,7 @@ async def receive_data(data: InputData):
                 "result": result_future_stop
             })
             await result_future_stop
+            latest_status = "Maintaining contact"
 
             # Move drawing_height*6250 (conversion from mm to steps) steps backward
             result_future_move = asyncio.get_running_loop().create_future()
@@ -184,8 +181,10 @@ async def receive_data(data: InputData):
                 "steps": int(data.drawing_height * 6250),  # Convert mm to steps
                 "result": result_future_move
             })
+            latest_status = "Drawing"
             await result_future_move
             logging.info("Drawing complete.")
+            latest_status = "Drawing complete"
            
 
         except Exception as e:
