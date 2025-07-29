@@ -166,6 +166,7 @@ async def receive_data(data: InputData):
             # Wait until pressure condition is met
             while latest_pressure > -10:
                 await asyncio.sleep(0.1)
+            logging.info("Contact detected.")
 
             # Stop continuous stepping
             result_future_stop = asyncio.get_running_loop().create_future()
@@ -175,16 +176,16 @@ async def receive_data(data: InputData):
             })
             await result_future_stop
 
-            # Move 400000 steps backward
+            # Move drawing_height*6250 (conversion from mm to steps) steps backward
             result_future_move = asyncio.get_running_loop().create_future()
             await stepper_queue.put({
                 "command": "MOVE",
                 "direction": "BACKWARD",
-                "steps": 400000,
+                "steps": int(data.drawing_height * 6250),  # Convert mm to steps
                 "result": result_future_move
             })
             await result_future_move
-            logging.info("Stepper BACKWARD complete.")
+            logging.info("Drawing complete.")
            
 
         except Exception as e:
