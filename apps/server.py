@@ -101,7 +101,7 @@ async def sensor_task():
             logging.error(f"Failed to read pressure/temperature: {e}")
         await asyncio.sleep(0.01)
 
-async def pressure_streamer(process, stop_event, interval=0.02):
+async def pressure_streamer(process, stop_event, interval=0.1):
     """Continuously stream latest_pressure to the stepper process."""
     global latest_pressure
     logging.info("Pressure streamer started")
