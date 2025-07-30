@@ -73,6 +73,10 @@ void pressureReader() {
 }
 
 void guardedMove(gpiod_line* step_line, gpiod_line* dir_line, gpiod_line* enable_line, Direction dir, int steps, int interval_us, float pressure_threshold) {
+    // Start pressure reader thread
+    pressure_reader_running = true;
+    pressure_reader_thread = std::thread(pressureReader);
+
     gpiod_line_set_value(enable_line, 0);
     gpiod_line_set_value(dir_line, dir == FORWARD ? 1 : 0);
     std::this_thread::sleep_for(std::chrono::microseconds(100));
@@ -93,6 +97,10 @@ void guardedMove(gpiod_line* step_line, gpiod_line* dir_line, gpiod_line* enable
         }
     }
     gpiod_line_set_value(enable_line, 1);
+
+    // Stop pressure reader thread
+    pressure_reader_running = false;
+    if (pressure_reader_thread.joinable()) pressure_reader_thread.join();
 }
 
 int main() {
@@ -120,10 +128,6 @@ int main() {
         gpiod_chip_close(chip);
         return 1;
     }
-
-    // Start pressure reader thread for continuous streaming
-    pressure_reader_running = true;
-    pressure_reader_thread = std::thread(pressureReader);
 
     std::string input;
     while (std::getline(std::cin, input)) {
