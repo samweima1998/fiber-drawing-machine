@@ -282,6 +282,9 @@ async def stepper_processor():
                                 # Send latest pressure as a line
                                 process.stdin.write(f"{latest_pressure}\n".encode())
                                 await process.stdin.drain()
+                        if command.get("result"):
+                            command["result"].set_result(True)
+                        continue  # Prevent duplicate command send and wait below
                     else:
                         raise ValueError(f"Unknown stepper command: {command['command']}")
 
