@@ -101,6 +101,18 @@ async def sensor_task():
             logging.error(f"Failed to read pressure/temperature: {e}")
         await asyncio.sleep(0.01)
 
+async def pressure_streamer(process, stop_event, interval=0.02):
+    """Continuously stream latest_pressure to the stepper process."""
+    global latest_pressure
+    while not stop_event.is_set():
+        try:
+            process.stdin.write(f"{latest_pressure}\n".encode())
+            await process.stdin.drain()
+        except Exception as e:
+            logging.error(f"Pressure streamer error: {e}")
+            break
+        await asyncio.sleep(interval)  # 20ms = 50Hz
+        
 @app.get("/status")
 async def get_status():
     status = {
@@ -269,7 +281,11 @@ async def stepper_processor():
                         process.stdin.write(cmd_str.encode())
                         await process.stdin.drain()
 
-                        # Protocol: respond to REQUEST_PRESSURE lines
+                        # Start pressure streaming
+                        stop_event = asyncio.Event()
+                        streamer_task = asyncio.create_task(pressure_streamer(process, stop_event))
+
+                        # Wait for DONE from stepper process
                         while True:
                             line = await process.stdout.readline()
                             if not line:
@@ -278,10 +294,11 @@ async def stepper_processor():
                             logging.info(f"Stepper subprocess output: {decoded}")
                             if decoded == "DONE":
                                 break
-                            if decoded == "REQUEST_PRESSURE":
-                                # Send latest pressure as a line
-                                process.stdin.write(f"{latest_pressure}\n".encode())
-                                await process.stdin.drain()
+
+                        # Stop pressure streaming
+                        stop_event.set()
+                        await streamer_task
+
                         if command.get("result"):
                             command["result"].set_result(True)
                         continue  # Prevent duplicate command send and wait below

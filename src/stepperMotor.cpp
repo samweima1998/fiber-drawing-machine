@@ -7,6 +7,7 @@
 #include <csignal>
 #include <cstdlib>
 #include <atomic>
+#include <optional>
 
 #define CHIP_NAME "gpiochip0" // Typical on Raspberry Pi
 #define DIR_PIN 25
@@ -54,20 +55,13 @@ void guardedMove(gpiod_line* step_line, gpiod_line* dir_line, gpiod_line* enable
     std::string pressure_line;
 
     while (steps_taken < steps) {
-        // Request pressure from server
-        std::cout << "REQUEST_PRESSURE" << std::endl;
-        std::cout.flush();
-
-        // Wait for pressure line from stdin
-        if (!std::getline(std::cin, pressure_line)) {
-            std::cerr << "ERROR: Failed to read pressure from stdin" << std::endl;
-            break;
-        }
-        try {
-            current_pressure = std::stof(pressure_line);
-        } catch (...) {
-            std::cerr << "ERROR: Invalid pressure value" << std::endl;
-            continue;
+        // Try to read latest pressure from stdin (non-blocking)
+        while (std::getline(std::cin, pressure_line)) {
+            try {
+                current_pressure = std::stof(pressure_line);
+            } catch (...) {
+                continue;
+            }
         }
 
         if (current_pressure < pressure_threshold) {
