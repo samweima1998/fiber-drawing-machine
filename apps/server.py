@@ -257,7 +257,24 @@ async def stepper_processor():
                     elif command["command"] == "MOVE":
                         cmd_str = f"{command['direction']} {command['steps']}\n"
                     elif command["command"] == "GUARDED_MOVE":
-                        cmd_str = f"GUARDED_MOVE {command['direction']} {command['steps']} {command['interval_us']} {command['pressure_threshold']}\n"
+                        cmd_str = f"GUARDED_MOVE {command['direction']} {command['steps']} {command.get('interval_us', 100)} {command['pressure_threshold']}\n"
+                        logging.info(f"Sent to stepper: {cmd_str.strip()}")
+                        process.stdin.write(cmd_str.encode())
+                        await process.stdin.drain()
+
+                        # Protocol: respond to REQUEST_PRESSURE lines
+                        while True:
+                            line = await process.stdout.readline()
+                            if not line:
+                                break
+                            decoded = line.decode().strip()
+                            logging.info(f"Stepper subprocess output: {decoded}")
+                            if decoded == "DONE":
+                                break
+                            if decoded == "REQUEST_PRESSURE":
+                                # Send latest pressure as a line
+                                process.stdin.write(f"{latest_pressure}\n".encode())
+                                await process.stdin.drain()
                     else:
                         raise ValueError(f"Unknown stepper command: {command['command']}")
 
