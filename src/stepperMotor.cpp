@@ -62,6 +62,7 @@ void pressureReader() {
             try {
                 latest_pressure_value = std::stof(line);
                 std::cerr << "Received pressure: " << latest_pressure_value << std::endl;
+                std::cerr.flush();
             } catch (...) {
                 // Ignore parse errors
             }
