@@ -49,7 +49,6 @@ class StepperCommandBatch(BaseModel):
 # Persistent process variables
 # command_queue: Optional[Queue] = None
 stepper_queue: Optional[Queue] = None
-serial_line_queue = asyncio.Queue()
 
 shutdown_flag = False
 
@@ -330,10 +329,11 @@ async def stepper_processor():
 
 @app.on_event("startup")
 async def startup_event():
-    global command_queue, stepper_queue, shutdown_flag, ser
+    global command_queue, stepper_queue, shutdown_flag, ser, serial_line_queue
     shutdown_flag = False
     # command_queue = Queue()
     stepper_queue = Queue()
+    serial_line_queue = Queue()  # <-- create here, in the running loop!
 
     # Function to check if process is running
     def is_running(executable):
