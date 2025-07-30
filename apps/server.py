@@ -178,33 +178,33 @@ async def receive_data(data: InputData):
             await result_future_stop
             latest_status = "Maintaining contact"
 
-            # #Pressure sensitive drawing
-            # result_future_guarded_move = asyncio.get_running_loop().create_future()
-            # await stepper_queue.put({
-            #     "command": "GUARDED_MOVE",
-            #     "direction": "BACKWARD",
-            #     "steps": int(data.drawing_height * 6250), # Convert mm to steps
-            #     "interval_us": 100,
-            #     "pressure_threshold": data.drawing_pressure,
-            #     "result": result_future_guarded_move
-            # })
-            # latest_status = "Drawing"
-            # await result_future_guarded_move
-            # logging.info("Drawing complete.")
-            # latest_status = "Drawing complete"
-
-            # Move drawing_height*6250 (conversion from mm to steps) steps backward
-            result_future_move = asyncio.get_running_loop().create_future()
+            #Pressure sensitive drawing
+            result_future_guarded_move = asyncio.get_running_loop().create_future()
             await stepper_queue.put({
-                "command": "MOVE",
+                "command": "GUARDED_MOVE",
                 "direction": "BACKWARD",
-                "steps": int(data.drawing_height * 6250),  # Convert mm to steps
-                "result": result_future_move
+                "steps": int(data.drawing_height * 6250), # Convert mm to steps
+                "interval_us": 100,
+                "pressure_threshold": data.drawing_pressure,
+                "result": result_future_guarded_move
             })
             latest_status = "Drawing"
-            await result_future_move
+            await result_future_guarded_move
             logging.info("Drawing complete.")
             latest_status = "Drawing complete"
+
+            # # Move drawing_height*6250 (conversion from mm to steps) steps backward
+            # result_future_move = asyncio.get_running_loop().create_future()
+            # await stepper_queue.put({
+            #     "command": "MOVE",
+            #     "direction": "BACKWARD",
+            #     "steps": int(data.drawing_height * 6250),  # Convert mm to steps
+            #     "result": result_future_move
+            # })
+            # latest_status = "Drawing"
+            # await result_future_move
+            # logging.info("Drawing complete.")
+            # latest_status = "Drawing complete"
 
             # Wait until temperature condition is met
             latest_status = "Waiting for curing temperature"
