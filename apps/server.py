@@ -157,7 +157,7 @@ async def receive_data(data: InputData):
             latest_status = "Approaching contact"
 
             # Wait until pressure condition is met
-            while latest_pressure > -10:
+            while latest_pressure > -100:
                 await asyncio.sleep(0.1)
             logging.info("Contact detected.")
             
