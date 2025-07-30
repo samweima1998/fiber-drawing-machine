@@ -150,7 +150,6 @@ async def receive_data(data: InputData):
                             latest_status = "Taring Failed"
                             raise TimeoutError("Timeout waiting for Arduino tare confirmation.")
                         continue
-                    break  # Break outer loop if TARE_OK found
             
             # Start continuous stepping
             result_future_start = asyncio.get_running_loop().create_future()
