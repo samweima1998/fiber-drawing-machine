@@ -49,6 +49,7 @@ class StepperCommandBatch(BaseModel):
 # Persistent process variables
 # command_queue: Optional[Queue] = None
 stepper_queue: Optional[Queue] = None
+serial_line_queue = asyncio.Queue()
 
 shutdown_flag = False
 
@@ -88,7 +89,8 @@ async def sensor_task():
         try:
             if ser and ser.in_waiting:
                 line = ser.readline().decode().strip()
-                # Expecting a line like: "20,100.6,93.8"
+                await serial_line_queue.put(line)  # Put every line on the queue
+                # Parse sensor data lines as before
                 parts = line.split(",")
                 if len(parts) == 3:
                     temp, raw_pressure, adj_pressure = map(float, parts)
@@ -96,7 +98,7 @@ async def sensor_task():
                     latest_pressure = adj_pressure
         except Exception as e:
             logging.error(f"Failed to read pressure/temperature: {e}")
-        await asyncio.sleep(0.1)  # Adjust as needed
+        await asyncio.sleep(0.01)
 
 @app.get("/status")
 async def get_status():
@@ -133,8 +135,9 @@ async def receive_data(data: InputData):
                 import time
                 start_time = time.time()
                 while True:
-                    while ser.in_waiting:
-                        line = ser.readline().decode(errors="ignore").strip()
+                    try:
+                        # Wait for a line from the queue, with timeout
+                        line = await asyncio.wait_for(serial_line_queue.get(), timeout=0.5)
                         logging.info(f"Arduino response: {line}")
                         if "# TARE_OK" in line:
                             logging.info("Tare confirmed by Arduino.")
@@ -142,12 +145,10 @@ async def receive_data(data: InputData):
                         if time.time() - start_time > 10:
                             latest_status = "Taring Failed"
                             raise TimeoutError("Timeout waiting for Arduino tare confirmation.")
-                    else:
-                        # No lines available, check timeout and sleep
+                    except asyncio.TimeoutError:
                         if time.time() - start_time > 10:
                             latest_status = "Taring Failed"
                             raise TimeoutError("Timeout waiting for Arduino tare confirmation.")
-                        await asyncio.sleep(0.04)
                         continue
                     break  # Break outer loop if TARE_OK found
             
