@@ -139,9 +139,9 @@ async def receive_data(data: InputData):
                         if "# TARE_OK" in line:
                             logging.info("Tare confirmed by Arduino.")
                             break
-                    if time.time() - start_time > 5:
-                        raise TimeoutError("Timeout waiting for Arduino tare confirmation.")
+                    if time.time() - start_time > 10:
                         latest_status = "Taring Failed"
+                        raise TimeoutError("Timeout waiting for Arduino tare confirmation.")  
                     await asyncio.sleep(0.04)
 
             
