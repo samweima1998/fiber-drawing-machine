@@ -44,6 +44,48 @@ void continuousStep(gpiod_line* step_line, int direction, int interval_us) {
     }
 }
 
+void guardedMove(gpiod_line* step_line, gpiod_line* dir_line, gpiod_line* enable_line, Direction dir, int steps, int interval_us, float pressure_threshold) {
+    gpiod_line_set_value(enable_line, 0);
+    gpiod_line_set_value(dir_line, dir == FORWARD ? 1 : 0);
+    std::this_thread::sleep_for(std::chrono::microseconds(100));
+
+    int steps_taken = 0;
+    float current_pressure = 0.0f;
+    std::string pressure_line;
+
+    while (steps_taken < steps) {
+        // Request pressure from server
+        std::cout << "REQUEST_PRESSURE" << std::endl;
+        std::cout.flush();
+
+        // Wait for pressure line from stdin
+        if (!std::getline(std::cin, pressure_line)) {
+            std::cerr << "ERROR: Failed to read pressure from stdin" << std::endl;
+            break;
+        }
+        try {
+            current_pressure = std::stof(pressure_line);
+        } catch (...) {
+            std::cerr << "ERROR: Invalid pressure value" << std::endl;
+            continue;
+        }
+
+        if (current_pressure < pressure_threshold) {
+            // Step
+            gpiod_line_set_value(step_line, 1);
+            std::this_thread::sleep_for(std::chrono::microseconds(20));
+            gpiod_line_set_value(step_line, 0);
+            std::this_thread::sleep_for(std::chrono::microseconds(interval_us));
+            steps_taken++;
+        } else {
+            // Pause if pressure too high
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+    }
+
+    gpiod_line_set_value(enable_line, 1);
+}
+
 int main() {
     // Set up libgpiod chip and lines
     chip = gpiod_chip_open_by_name(CHIP_NAME);
@@ -119,6 +161,29 @@ int main() {
             } else {
                 std::cout << "ERROR: Continuous stepping not running" << std::endl;
             }
+            std::cout << "DONE" << std::endl;
+            std::cout.flush();
+            continue;
+        }
+
+        if (command == "GUARDED_MOVE") {
+            std::string direction_str;
+            int steps, interval_us;
+            float pressure_threshold;
+            input_stream >> direction_str >> steps >> interval_us >> pressure_threshold;
+
+            Direction dir;
+            if (direction_str == "FORWARD") dir = FORWARD;
+            else if (direction_str == "BACKWARD") dir = BACKWARD;
+            else {
+                std::cout << "ERROR: Invalid direction" << std::endl;
+                std::cout << "DONE" << std::endl;
+                std::cout.flush();
+                continue;
+            }
+
+            guardedMove(step_line, dir_line, enable_line, dir, steps, interval_us, pressure_threshold);
+            std::cout << "SUCCESS: Guarded move complete" << std::endl;
             std::cout << "DONE" << std::endl;
             std::cout.flush();
             continue;

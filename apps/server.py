@@ -141,7 +141,8 @@ async def receive_data(data: InputData):
                             break
                     if time.time() - start_time > 5:
                         raise TimeoutError("Timeout waiting for Arduino tare confirmation.")
-                    await asyncio.sleep(0.05)
+                        latest_status = "Taring Failed"
+                    await asyncio.sleep(0.04)
 
             
             # Start continuous stepping
@@ -170,18 +171,33 @@ async def receive_data(data: InputData):
             await result_future_stop
             latest_status = "Maintaining contact"
 
-            # Move drawing_height*6250 (conversion from mm to steps) steps backward
-            result_future_move = asyncio.get_running_loop().create_future()
+            #Pressure sensitive drawing
+            result_future_guarded_move = asyncio.get_running_loop().create_future()
             await stepper_queue.put({
-                "command": "MOVE",
+                "command": "GUARDED_MOVE",
                 "direction": "BACKWARD",
-                "steps": int(data.drawing_height * 6250),  # Convert mm to steps
-                "result": result_future_move
+                "steps": int(data.drawing_height * 6250), # Convert mm to steps
+                "interval_us": 100,
+                "pressure_threshold": data.drawing_pressure,
+                "result": result_future_guarded_move
             })
             latest_status = "Drawing"
-            await result_future_move
+            await result_future_guarded_move
             logging.info("Drawing complete.")
             latest_status = "Drawing complete"
+
+            # # Move drawing_height*6250 (conversion from mm to steps) steps backward
+            # result_future_move = asyncio.get_running_loop().create_future()
+            # await stepper_queue.put({
+            #     "command": "MOVE",
+            #     "direction": "BACKWARD",
+            #     "steps": int(data.drawing_height * 6250),  # Convert mm to steps
+            #     "result": result_future_move
+            # })
+            # latest_status = "Drawing"
+            # await result_future_move
+            # logging.info("Drawing complete.")
+            # latest_status = "Drawing complete"
 
             # Wait until temperature condition is met
             latest_status = "Waiting for curing temperature"
@@ -240,6 +256,8 @@ async def stepper_processor():
                         cmd_str = "STOP\n"
                     elif command["command"] == "MOVE":
                         cmd_str = f"{command['direction']} {command['steps']}\n"
+                    elif command["command"] == "GUARDED_MOVE":
+                        cmd_str = f"GUARDED_MOVE {command['direction']} {command['steps']} {command['interval_us']} {command['pressure_threshold']}\n"
                     else:
                         raise ValueError(f"Unknown stepper command: {command['command']}")
 
