@@ -48,6 +48,10 @@ void continuousStep(gpiod_line* step_line, int direction, int interval_us) {
 }
 
 void guardedMove(gpiod_line* step_line, gpiod_line* dir_line, gpiod_line* enable_line, Direction dir, int steps, int interval_us, float pressure_threshold) {
+    // Save current flags
+    int orig_flags = fcntl(STDIN_FILENO, F_GETFL, 0);
+    fcntl(STDIN_FILENO, F_SETFL, orig_flags | O_NONBLOCK);
+
     gpiod_line_set_value(enable_line, 0);
     gpiod_line_set_value(dir_line, dir == FORWARD ? 1 : 0);
     std::this_thread::sleep_for(std::chrono::microseconds(100));
@@ -80,13 +84,12 @@ void guardedMove(gpiod_line* step_line, gpiod_line* dir_line, gpiod_line* enable
     }
 
     gpiod_line_set_value(enable_line, 1);
+
+    // Restore original flags before returning
+    fcntl(STDIN_FILENO, F_SETFL, orig_flags);
 }
 
 int main() {
-    // Set stdin to non-blocking mode
-    int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
-    fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
-
     // Set up libgpiod chip and lines
     chip = gpiod_chip_open_by_name(CHIP_NAME);
     if (!chip) {
