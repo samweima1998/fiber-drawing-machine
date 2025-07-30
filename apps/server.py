@@ -89,7 +89,9 @@ async def sensor_task():
         try:
             if ser and ser.in_waiting:
                 line = ser.readline().decode().strip()
-                await serial_line_queue.put(line)  # Put every line on the queue
+                # Check for special protocol lines
+                if line.startswith("# TARE_OK"):
+                    await serial_line_queue.put(line)
                 # Parse sensor data lines as before
                 parts = line.split(",")
                 if len(parts) == 3:
