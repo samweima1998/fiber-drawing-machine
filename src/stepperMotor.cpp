@@ -65,6 +65,7 @@ void guardedMove(gpiod_line* step_line, gpiod_line* dir_line, gpiod_line* enable
         if (std::getline(std::cin, pressure_line)) {
             try {
                 current_pressure = std::stof(pressure_line);
+                std::cerr << "Received pressure: " << current_pressure << std::endl;
             } catch (...) {
                 // Ignore parse errors
             }
