@@ -133,17 +133,23 @@ async def receive_data(data: InputData):
                 import time
                 start_time = time.time()
                 while True:
-                    if ser.in_waiting:
+                    while ser.in_waiting:
                         line = ser.readline().decode(errors="ignore").strip()
                         logging.info(f"Arduino response: {line}")
                         if "# TARE_OK" in line:
                             logging.info("Tare confirmed by Arduino.")
                             break
-                    if time.time() - start_time > 10:
-                        latest_status = "Taring Failed"
-                        raise TimeoutError("Timeout waiting for Arduino tare confirmation.")  
-                    await asyncio.sleep(0.04)
-
+                        if time.time() - start_time > 10:
+                            latest_status = "Taring Failed"
+                            raise TimeoutError("Timeout waiting for Arduino tare confirmation.")
+                    else:
+                        # No lines available, check timeout and sleep
+                        if time.time() - start_time > 10:
+                            latest_status = "Taring Failed"
+                            raise TimeoutError("Timeout waiting for Arduino tare confirmation.")
+                        await asyncio.sleep(0.04)
+                        continue
+                    break  # Break outer loop if TARE_OK found
             
             # Start continuous stepping
             result_future_start = asyncio.get_running_loop().create_future()
