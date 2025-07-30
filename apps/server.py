@@ -104,6 +104,7 @@ async def sensor_task():
 async def pressure_streamer(process, stop_event, interval=0.02):
     """Continuously stream latest_pressure to the stepper process."""
     global latest_pressure
+    logging.info("Pressure streamer started")
     while not stop_event.is_set():
         try:
             process.stdin.write(f"{latest_pressure}\n".encode())
@@ -283,6 +284,7 @@ async def stepper_processor():
                         await process.stdin.drain()
 
                         # Start pressure streaming
+                        logging.info("Starting pressure streamer for GUARDED_MOVE")
                         stop_event = asyncio.Event()
                         streamer_task = asyncio.create_task(pressure_streamer(process, stop_event))
 
