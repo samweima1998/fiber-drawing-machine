@@ -58,11 +58,11 @@ void guardedMove(gpiod_line* step_line, gpiod_line* dir_line, gpiod_line* enable
 
     int steps_taken = 0;
     float current_pressure = 0.0f;
-    std::string pressure_line;
 
     while (steps_taken < steps) {
-        // Non-blocking read of latest pressure
-        if (std::getline(std::cin, pressure_line)) {
+        // Drain all available lines (non-blocking)
+        std::string pressure_line;
+        while (std::getline(std::cin, pressure_line)) {
             try {
                 current_pressure = std::stof(pressure_line);
                 std::cerr << "Received pressure: " << current_pressure << std::endl;
