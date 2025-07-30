@@ -8,6 +8,8 @@
 #include <cstdlib>
 #include <atomic>
 #include <optional>
+#include <fcntl.h>
+#include <unistd.h>
 
 #define CHIP_NAME "gpiochip0" // Typical on Raspberry Pi
 #define DIR_PIN 25
@@ -55,12 +57,12 @@ void guardedMove(gpiod_line* step_line, gpiod_line* dir_line, gpiod_line* enable
     std::string pressure_line;
 
     while (steps_taken < steps) {
-        // Try to read latest pressure from stdin (non-blocking)
-        while (std::getline(std::cin, pressure_line)) {
+        // Non-blocking read of latest pressure
+        if (std::getline(std::cin, pressure_line)) {
             try {
                 current_pressure = std::stof(pressure_line);
             } catch (...) {
-                continue;
+                // Ignore parse errors
             }
         }
 
@@ -72,7 +74,7 @@ void guardedMove(gpiod_line* step_line, gpiod_line* dir_line, gpiod_line* enable
             std::this_thread::sleep_for(std::chrono::microseconds(interval_us));
             steps_taken++;
         } else {
-            // Pause if pressure too high
+            // Pressure too high, pause stepping
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
     }
@@ -81,6 +83,10 @@ void guardedMove(gpiod_line* step_line, gpiod_line* dir_line, gpiod_line* enable
 }
 
 int main() {
+    // Set stdin to non-blocking mode
+    int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
+    fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
+
     // Set up libgpiod chip and lines
     chip = gpiod_chip_open_by_name(CHIP_NAME);
     if (!chip) {
