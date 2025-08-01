@@ -291,11 +291,15 @@ async def stepper_processor():
 
                         # Wait for DONE from stepper process
                         while True:
-                            while True:
-                                err_line = await process.stderr.readline()
-                                if not err_line:
-                                    break
-                                print("Stepper STDERR:", err_line.decode().strip())
+                            # Read one line from stderr (non-blocking)
+                            try:
+                                err_line = await asyncio.wait_for(process.stderr.readline(), timeout=0.01)
+                                if err_line:
+                                    print("Stepper STDERR:", err_line.decode().strip())
+                            except asyncio.TimeoutError:
+                                pass  # No stderr output this cycle
+
+                            # Read one line from stdout (blocking)
                             line = await process.stdout.readline()
                             if not line:
                                 break
@@ -320,11 +324,15 @@ async def stepper_processor():
 
                     # Wait for DONE
                     while True:
-                        while True:
-                                err_line = await process.stderr.readline()
-                                if not err_line:
-                                    break
+                        # Read one line from stderr (non-blocking)
+                        try:
+                            err_line = await asyncio.wait_for(process.stderr.readline(), timeout=0.01)
+                            if err_line:
                                 print("Stepper STDERR:", err_line.decode().strip())
+                        except asyncio.TimeoutError:
+                            pass  # No stderr output this cycle
+
+                        # Read one line from stdout (blocking)
                         line = await process.stdout.readline()
                         if not line:
                             break
