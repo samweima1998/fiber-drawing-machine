@@ -63,8 +63,8 @@ void pressureReader() {
                 latest_pressure_value = std::stof(line);
                 std::cout << "Received pressure: " << latest_pressure_value << std::endl;
                 std::cout.flush();
-                // std::cerr << "Received pressure: " << latest_pressure_value << std::endl;
-                // std::cerr.flush();
+                std::cerr << "Received pressure: " << latest_pressure_value << std::endl;
+                std::cerr.flush();
             } catch (...) {
                 // Ignore parse errors
             }
@@ -107,6 +107,7 @@ void guardedMove(gpiod_line* step_line, gpiod_line* dir_line, gpiod_line* enable
 }
 
 int main() {
+    std::cerr.setf(std::ios::unitbuf);
     // Set up libgpiod chip and lines
     chip = gpiod_chip_open_by_name(CHIP_NAME);
     if (!chip) {
