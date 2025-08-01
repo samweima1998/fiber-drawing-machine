@@ -63,8 +63,6 @@ void pressureReader() {
                 latest_pressure_value = std::stof(line);
                 std::cout << "Received pressure: " << latest_pressure_value << std::endl;
                 std::cout.flush();
-                std::cerr << "Received pressure: " << latest_pressure_value << std::endl;
-                std::cerr.flush();
             } catch (...) {
                 // Ignore parse errors
             }
@@ -107,11 +105,11 @@ void guardedMove(gpiod_line* step_line, gpiod_line* dir_line, gpiod_line* enable
 }
 
 int main() {
-    std::cerr.setf(std::ios::unitbuf);
+    // std::cerr is defunct; using std::cout for all logs
     // Set up libgpiod chip and lines
     chip = gpiod_chip_open_by_name(CHIP_NAME);
     if (!chip) {
-        std::cerr << "ERROR: Failed to open GPIO chip" << std::endl;
+        std::cout << "ERROR: Failed to open GPIO chip" << std::endl;
         return 1;
     }
 
@@ -120,7 +118,7 @@ int main() {
     enable_line = gpiod_chip_get_line(chip, ENABLE_PIN);
 
     if (!dir_line || !step_line || !enable_line) {
-        std::cerr << "ERROR: Failed to access one or more GPIO lines" << std::endl;
+        std::cout << "ERROR: Failed to access one or more GPIO lines" << std::endl;
         gpiod_chip_close(chip);
         return 1;
     }
@@ -128,7 +126,7 @@ int main() {
     if (gpiod_line_request_output(dir_line, "stepper", 0) ||
         gpiod_line_request_output(step_line, "stepper", 0) ||
         gpiod_line_request_output(enable_line, "stepper", 1)) {
-        std::cerr << "ERROR: Failed to request GPIO lines as outputs" << std::endl;
+        std::cout << "ERROR: Failed to request GPIO lines as outputs" << std::endl;
         gpiod_chip_close(chip);
         return 1;
     }

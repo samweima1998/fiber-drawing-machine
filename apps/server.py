@@ -291,14 +291,6 @@ async def stepper_processor():
 
                         # Wait for DONE from stepper process
                         while True:
-                            # Read one line from stderr (non-blocking)
-                            try:
-                                err_line = await asyncio.wait_for(process.stderr.readline(), timeout=0.01)
-                                if err_line:
-                                    print("Stepper STDERR:", err_line.decode().strip())
-                            except asyncio.TimeoutError:
-                                pass  # No stderr output this cycle
-
                             # Read one line from stdout (blocking)
                             line = await process.stdout.readline()
                             if not line:
@@ -324,14 +316,6 @@ async def stepper_processor():
 
                     # Wait for DONE
                     while True:
-                        # Read one line from stderr (non-blocking)
-                        try:
-                            err_line = await asyncio.wait_for(process.stderr.readline(), timeout=0.01)
-                            if err_line:
-                                print("Stepper STDERR:", err_line.decode().strip())
-                        except asyncio.TimeoutError:
-                            pass  # No stderr output this cycle
-
                         # Read one line from stdout (blocking)
                         line = await process.stdout.readline()
                         if not line:
@@ -426,20 +410,6 @@ svelte_frontend = current_file_path.parent.parent / "frontend" / "build"
 @app.get("/")
 async def serve_svelte():
     return FileResponse(svelte_frontend / "index.html")
-
-# @app.post("/stepper")
-# async def control_stepper(batch: StepperCommandBatch):
-#     results = []
-#     for cmd in batch.commands:
-#         result_future = asyncio.get_running_loop().create_future()
-#         await stepper_queue.put({
-#             "direction": str(cmd.direction),  # force string copy
-#             "steps": int(cmd.steps),          # force int copy
-#             "result": result_future
-#         })
-#         results.append(result_future)
-#     await asyncio.gather(*results)
-#     return {"status": True, "results": results}
 
 # Serve the static files (Svelte app)
 # Ensure these files are mounted last, otherwise POST requests may fail
