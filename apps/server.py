@@ -418,14 +418,13 @@ async def shutdown_event():
 # Define the path to the frontend folder correctly
 svelte_frontend = current_file_path.parent.parent / "frontend" / "build"
 
+# Serve the static files (Svelte app)
+app.mount("/static", StaticFiles(directory=svelte_frontend, html=True), name="static")
+
 # Serve the Svelte index.html for the root route
 @app.get("/")
 async def serve_svelte():
     return FileResponse(svelte_frontend / "index.html")
-
-# Serve the static files (Svelte app)
-# Ensure these files are mounted last, otherwise POST requests may fail
-app.mount("/", StaticFiles(directory=svelte_frontend, html=True), name="build")
 
 # Endpoint to set skip_waiting_flag
 @app.post("/skip_waiting")
