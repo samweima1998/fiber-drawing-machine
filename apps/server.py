@@ -79,6 +79,8 @@ latest_pressure = 0.0
 
 # Global variable to store the latest status
 latest_status: str = "Idle"
+# Global flag to skip waiting conditions
+skip_waiting_flag = False
 
 # Initialize serial connection (do this in startup event)
 ser = None
@@ -125,7 +127,7 @@ async def get_status():
 
 @app.post("/send_data")
 async def receive_data(data: InputData):
-    global latest_status, latest_temperature, latest_pressure
+    global latest_status, latest_temperature, latest_pressure, skip_waiting_flag
     if send_data_lock.locked():
         raise HTTPException(status_code=429, detail="Previous /send_data still in progress")
 
@@ -134,6 +136,10 @@ async def receive_data(data: InputData):
             # Wait until temperature condition is met
             latest_status = "Waiting for drawing temperature"
             while abs(latest_temperature - data.drawing_temperature) > 0.5:
+                if skip_waiting_flag:
+                    logging.info("Skipping waiting for drawing temperature due to user request.")
+                    skip_waiting_flag = False
+                    break
                 await asyncio.sleep(0.1)
             logging.info("Drawing temperature reached.")
 
@@ -178,6 +184,10 @@ async def receive_data(data: InputData):
 
             # Wait until pressure condition is met
             while latest_pressure > -100:
+                if skip_waiting_flag:
+                    logging.info("Skipping waiting for pressure due to user request.")
+                    skip_waiting_flag = False
+                    break
                 await asyncio.sleep(0.1)
             logging.info("Contact detected.")
             
@@ -222,6 +232,10 @@ async def receive_data(data: InputData):
             # Wait until temperature condition is met
             latest_status = "Waiting for curing temperature"
             while abs(latest_temperature - data.curing_temperature) > 0.5:
+                if skip_waiting_flag:
+                    logging.info("Skipping waiting for curing temperature due to user request.")
+                    skip_waiting_flag = False
+                    break
                 await asyncio.sleep(0.1)
             logging.info("curing temperature reached.")
 
@@ -412,6 +426,14 @@ async def serve_svelte():
 # Serve the static files (Svelte app)
 # Ensure these files are mounted last, otherwise POST requests may fail
 app.mount("/", StaticFiles(directory=svelte_frontend, html=True), name="build")
+
+# Endpoint to set skip_waiting_flag
+@app.post("/skip_waiting")
+async def skip_waiting():
+    global skip_waiting_flag
+    skip_waiting_flag = True
+    logging.info("Skip waiting triggered by user.")
+    return {"status": "skipped"}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=7070, log_level="info", access_log=False)
