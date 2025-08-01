@@ -419,7 +419,7 @@ async def shutdown_event():
 svelte_frontend = current_file_path.parent.parent / "frontend" / "build"
 
 # Serve the static files (Svelte app)
-app.mount("/static", StaticFiles(directory=svelte_frontend, html=True), name="build")
+app.mount("/static", StaticFiles(directory=svelte_frontend, html=True), name="static")
 
 # Serve the Svelte index.html for the root route
 @app.get("/")
