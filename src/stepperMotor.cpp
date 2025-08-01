@@ -38,7 +38,7 @@ void pulseStepPin(gpiod_line* step_line, int steps) {
 }
 
 // Function to send continuous step pulses
-void continuousStep(gpiod_line* step_line, int direction, int interval_us) {
+void continuousStep(gpiod_line* step_line, int interval_us) {
     while (continuous_running) {
         gpiod_line_set_value(step_line, 1);
         std::this_thread::sleep_for(std::chrono::microseconds(20));
@@ -61,8 +61,8 @@ void pressureReader() {
         if (std::getline(std::cin, line)) {
             try {
                 latest_pressure_value = std::stof(line);
-                std::cout << "Received pressure: " << latest_pressure_value << std::endl;
-                std::cout.flush();
+                // std::cout << "Received pressure: " << latest_pressure_value << std::endl;
+                // std::cout.flush();
             } catch (...) {
                 // Ignore parse errors
             }
@@ -161,7 +161,7 @@ int main() {
                 continuous_running = true;
                 gpiod_line_set_value(enable_line, 0);
                 gpiod_line_set_value(dir_line, dir == FORWARD ? 1 : 0);
-                continuous_thread = std::thread(continuousStep, step_line, dir, interval_us);
+                continuous_thread = std::thread(continuousStep, step_line, interval_us);
                 std::cout << "SUCCESS: Started continuous stepping in " << direction_str << std::endl;
             } else {
                 std::cout << "ERROR: Continuous stepping already running" << std::endl;

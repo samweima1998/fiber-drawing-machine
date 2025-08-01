@@ -107,10 +107,8 @@ async def pressure_streamer(process, stop_event, interval=0.1):
     logging.info("Pressure streamer started")
     while not stop_event.is_set():
         try:
-            logging.info("Pressure streamer: about to write")
             process.stdin.write(f"{latest_pressure}\n".encode())
             await process.stdin.drain()
-            logging.info(f"Pressure streamer sent: {latest_pressure}")
         except Exception as e:
             logging.error(f"Pressure streamer error: {e}")
             break
