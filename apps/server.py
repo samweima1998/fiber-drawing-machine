@@ -291,8 +291,10 @@ async def stepper_processor():
 
                         # Wait for DONE from stepper process
                         while True:
-                            err_line = await process.stderr.readline()
-                            if err_line:
+                            while True:
+                                err_line = await process.stderr.readline()
+                                if not err_line:
+                                    break
                                 print("Stepper STDERR:", err_line.decode().strip())
                             line = await process.stdout.readline()
                             if not line:
@@ -318,9 +320,11 @@ async def stepper_processor():
 
                     # Wait for DONE
                     while True:
-                        err_line = await process.stderr.readline()
-                        if err_line:
-                            print("Stepper STDERR:", err_line.decode().strip())
+                        while True:
+                                err_line = await process.stderr.readline()
+                                if not err_line:
+                                    break
+                                print("Stepper STDERR:", err_line.decode().strip())
                         line = await process.stdout.readline()
                         if not line:
                             break
