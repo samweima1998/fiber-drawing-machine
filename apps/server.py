@@ -291,6 +291,9 @@ async def stepper_processor():
 
                         # Wait for DONE from stepper process
                         while True:
+                            err_line = await process.stderr.readline()
+                            if err_line:
+                                print("Stepper STDERR:", err_line.decode().strip())
                             line = await process.stdout.readline()
                             if not line:
                                 break
@@ -315,6 +318,9 @@ async def stepper_processor():
 
                     # Wait for DONE
                     while True:
+                        err_line = await process.stderr.readline()
+                        if err_line:
+                            print("Stepper STDERR:", err_line.decode().strip())
                         line = await process.stdout.readline()
                         if not line:
                             break
@@ -367,10 +373,10 @@ async def startup_event():
     if is_running(stepper_executable):
         os.system(f"sudo pkill -f {stepper_executable}")
 
-    # Initialize serial connection for pressure sensor
+    # Initialize serial connection for arduino
     try:
         ser = serial.Serial('/dev/serial/by-id/usb-Arduino_LLC_Arduino_NANO_33_IoT_7CB63C1050304D48502E3120FF191434-if00', 115200, timeout=1)
-        logging.info("Serial connection to pressure sensor established.")
+        logging.info("Serial connection to arduino established.")
     except Exception as e:
         logging.error(f"Failed to establish serial connection: {e}")
 
