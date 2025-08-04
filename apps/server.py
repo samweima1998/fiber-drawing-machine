@@ -60,9 +60,10 @@ stepper_executable = current_file_path.parent.parent / "build" / "stepperMotor"
 
 class InputData(BaseModel):
     drawing_temperature: float
-    curing_temperature: float
+    contact_time: float
     drawing_pressure: float
     drawing_height: float
+    curing_temperature: float
     curing_intensity: float
     curing_time: float
 
@@ -183,7 +184,7 @@ async def receive_data(data: InputData):
             latest_status = "Approaching contact"
 
             # Wait until pressure condition is met
-            while latest_pressure > -100:
+            while latest_pressure > -200:
                 if skip_waiting_flag:
                     logging.info("Skipping waiting for pressure due to user request.")
                     skip_waiting_flag = False
@@ -199,7 +200,9 @@ async def receive_data(data: InputData):
                 "result": result_future_stop
             })
             await result_future_stop
+
             latest_status = "Maintaining contact"
+            await asyncio.sleep(data.contact_time)  # Wait for contact time
 
             #Pressure sensitive drawing
             result_future_guarded_move = asyncio.get_running_loop().create_future()
