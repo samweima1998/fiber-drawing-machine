@@ -211,7 +211,7 @@ async def receive_data(data: InputData):
                 "command": "GUARDED_MOVE",
                 "direction": "BACKWARD",
                 "steps": int(data.drawing_height * 6250), # Convert mm to steps
-                "interval_us": 100,
+                "interval_us": 200,
                 "pressure_threshold": data.drawing_pressure,
                 "result": result_future_guarded_move
             })
@@ -259,7 +259,7 @@ async def receive_data(data: InputData):
                 "command": "GUARDED_MOVE",
                 "direction": "BACKWARD",
                 "steps": int(data.drawing_height * 625), # 10% of drawing height for stretching
-                "interval_us": 100,
+                "interval_us": 200,
                 "pressure_threshold": data.drawing_pressure,
                 "result": result_future_guarded_move
             })
