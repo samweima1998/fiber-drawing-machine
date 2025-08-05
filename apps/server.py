@@ -66,6 +66,7 @@ class InputData(BaseModel):
     curing_temperature: float
     curing_intensity: float
     curing_time: float
+    stretching_delay: float
 
 
 
@@ -250,7 +251,7 @@ async def receive_data(data: InputData):
                 logging.info(f"Sent 'start curing {data.curing_intensity}' command to Arduino.")
                 latest_status = "Gentle curing"
 
-            await asyncio.sleep(min(5, data.curing_time))  # Wait for stretching time
+            await asyncio.sleep(min(data.stretching_delay, data.curing_time))  # Wait for stretching time
             #Pressure sensitive stretching
             logging.info("Starting pressure-sensitive stretching.")
             result_future_guarded_move = asyncio.get_running_loop().create_future()
@@ -266,7 +267,7 @@ async def receive_data(data: InputData):
             await result_future_guarded_move
             latest_status = "Gentle curing"
 
-            await asyncio.sleep(data.curing_time-5)  # Wait for curing time
+            await asyncio.sleep(data.curing_time-data.stretching_delay)  # Wait for curing time
             if ser and ser.is_open:
                 ser.reset_input_buffer()  # Clear any old data
                 ser.write(b"stop curing\n")
@@ -274,20 +275,20 @@ async def receive_data(data: InputData):
                 logging.info("Sent 'stop curing' command to Arduino.")
                 latest_status = "Curing complete"
             
-            if data.curing_time > 0:
-                if ser and ser.is_open:
-                    ser.reset_input_buffer()  # Clear any old data
-                    ser.write(f"start curing {min(data.curing_intensity*10, 100)}\n".encode())
-                    ser.flush()
-                    logging.info(f"Sent 'start curing {min(data.curing_intensity*10, 100)}' command to Arduino.")
-                    latest_status = "Harsh curing"
-                await asyncio.sleep(data.curing_time)  # Wait for curing time
-                if ser and ser.is_open:
-                    ser.reset_input_buffer()  # Clear any old data
-                    ser.write(b"stop curing\n")
-                    ser.flush()
-                    logging.info("Sent 'stop curing' command to Arduino.")
-                    latest_status = "Curing complete"
+            # if data.curing_time > 0:
+            #     if ser and ser.is_open:
+            #         ser.reset_input_buffer()  # Clear any old data
+            #         ser.write(f"start curing {min(data.curing_intensity*10, 100)}\n".encode())
+            #         ser.flush()
+            #         logging.info(f"Sent 'start curing {min(data.curing_intensity*10, 100)}' command to Arduino.")
+            #         latest_status = "Harsh curing"
+            #     await asyncio.sleep(data.curing_time)  # Wait for curing time
+            #     if ser and ser.is_open:
+            #         ser.reset_input_buffer()  # Clear any old data
+            #         ser.write(b"stop curing\n")
+            #         ser.flush()
+            #         logging.info("Sent 'stop curing' command to Arduino.")
+            #         latest_status = "Curing complete"
 
         except Exception as e:
             logging.error(f"Error in /send_data: {e}")
