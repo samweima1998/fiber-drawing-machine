@@ -185,7 +185,7 @@ async def receive_data(data: InputData):
             latest_status = "Approaching contact"
 
             # Wait until pressure condition is met
-            while latest_pressure > -200:
+            while latest_pressure > -150:
                 if skip_waiting_flag:
                     logging.info("Skipping waiting for pressure due to user request.")
                     skip_waiting_flag = False
