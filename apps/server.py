@@ -16,6 +16,9 @@ from typing import Optional
 import signal
 from fastapi import Response
 import serial
+from shutil import which
+from datetime import datetime
+
 
 logging.basicConfig(level=logging.INFO)
 
@@ -28,15 +31,6 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE"],  # Ensure POST is included
     allow_headers=["*"],
 )
-
-# # Command models
-# class Command(BaseModel):
-#     cs_pin: int
-#     args: str
-
-# class CommandBatch(BaseModel):
-#     commands: List[Command]
-
 class StepperCommand(BaseModel):
     command: str  # "START", "STOP", "MOVE"
     direction: Optional[str] = None  # "FORWARD" or "BACKWARD"
@@ -68,8 +62,6 @@ class InputData(BaseModel):
     curing_time: float
     stretching_delay: float
 
-
-
 # Global lock to prevent overlapping /send_data executions
 send_data_lock = asyncio.Lock()
 
@@ -83,6 +75,154 @@ latest_pressure = 0.0
 latest_status: str = "Idle"
 # Global flag to skip waiting conditions
 skip_waiting_flag = False
+
+record_proc: Optional[asyncio.subprocess.Process] = None
+record_meta = {"out": None, "fps": None, "stopped_mtx": False}
+record_lock = asyncio.Lock()
+
+class RecordStartReq(BaseModel):
+    width: int = 1920
+    height: int = 1080
+    fps: int = 30
+    bitrate: int = 17_000_000
+
+async def _svc_is_active(name: str) -> bool:
+    p = await asyncio.create_subprocess_exec(
+        "systemctl", "is-active", "--quiet", name
+    )
+    await p.wait()
+    return p.returncode == 0
+
+async def _svc_action(action: str, name: str):
+    # Requires passwordless sudo for these commands; see notes below.
+    p = await asyncio.create_subprocess_exec(
+        "sudo", "systemctl", action, name,
+        stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
+    )
+    await p.wait()
+
+@app.post("/record/start")
+async def record_start(body: RecordStartReq):
+    global record_proc, record_meta
+    async with record_lock:
+        if record_proc and record_proc.returncode is None:
+            raise HTTPException(status_code=409, detail="Recording already running")
+
+        # Stop MediaMTX if active (so it doesn't hold the camera)
+        stopped_mtx = False
+        try:
+            if await _svc_is_active("mediamtx"):
+                await _svc_action("stop", "mediamtx")
+                stopped_mtx = True
+        except Exception:
+            # If we can't stop it, recording may fail with "device busy"
+            pass
+
+        # (Optional on Bullseye; hardware encoder module)
+        try:
+            await asyncio.create_subprocess_exec(
+                "sudo", "modprobe", "bcm2835_codec",
+                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
+            )
+        except Exception:
+            pass
+
+        # Prepare output
+        Path.home().joinpath("videos").mkdir(parents=True, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        out_h264 = Path.home()/ "videos" / f"rec_{body.width}x{body.height}_{body.fps}fps_{ts}.h264"
+
+        # Spawn libcamera-vid (headless)
+        cmd = [
+            "libcamera-vid", "--nopreview", "-t", "0", "--codec", "h264", "--inline",
+            "--width", str(body.width), "--height", str(body.height),
+            "--framerate", str(body.fps),
+            "--bitrate", str(body.bitrate),
+            "--intra", str(body.fps * 2),
+            "-o", str(out_h264)
+        ]
+        record_proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+
+        # Give it a moment to fail fast if there's a camera/format error
+        await asyncio.sleep(1.0)
+        if record_proc.returncode is not None:
+            err = (await record_proc.stderr.read()).decode(errors="ignore")
+            # Try to restart MediaMTX if we stopped it
+            if stopped_mtx:
+                await _svc_action("start", "mediamtx")
+            raise HTTPException(status_code=500, detail=f"libcamera-vid failed: {err.strip()}")
+
+        record_meta.update({"out": str(out_h264), "fps": body.fps, "stopped_mtx": stopped_mtx})
+        return {"status": "recording", "raw": str(out_h264), "fps": body.fps}
+
+@app.post("/record/stop")
+async def record_stop():
+    global record_proc, record_meta
+    async with record_lock:
+        if not record_proc or record_proc.returncode is not None:
+            raise HTTPException(status_code=409, detail="No active recording")
+
+        # Stop gracefully
+        record_proc.send_signal(signal.SIGINT)
+        try:
+            await asyncio.wait_for(record_proc.wait(), timeout=5.0)
+        except asyncio.TimeoutError:
+            record_proc.kill()
+            await record_proc.wait()
+
+        out_h264 = record_meta.get("out")
+        fps = record_meta.get("fps", 30)
+        if not out_h264 or not Path(out_h264).exists():
+            # Try to restart MediaMTX if we stopped it
+            if record_meta.get("stopped_mtx"):
+                await _svc_action("start", "mediamtx")
+            raise HTTPException(status_code=500, detail="Raw .h264 not found")
+
+        out_mp4 = str(Path(out_h264).with_suffix(".mp4"))
+
+        # Remux to mp4 (prefer MP4Box; fallback to ffmpeg)
+        if which("MP4Box"):
+            p = await asyncio.create_subprocess_exec(
+                "MP4Box", "-quiet", "-add", f"{out_h264}:fps={fps}", "-new", out_mp4,
+                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE
+            )
+            await p.wait()
+            if p.returncode != 0:
+                # Fallback to ffmpeg
+                p = await asyncio.create_subprocess_exec(
+                    "ffmpeg", "-hide_banner", "-loglevel", "error",
+                    "-r", str(fps), "-f", "h264", "-i", out_h264, "-c", "copy", out_mp4
+                )
+                await p.wait()
+                if p.returncode != 0:
+                    if record_meta.get("stopped_mtx"):
+                        await _svc_action("start", "mediamtx")
+                    raise HTTPException(status_code=500, detail="Remux to MP4 failed")
+        else:
+            p = await asyncio.create_subprocess_exec(
+                "ffmpeg", "-hide_banner", "-loglevel", "error",
+                "-r", str(fps), "-f", "h264", "-i", out_h264, "-c", "copy", out_mp4
+            )
+            await p.wait()
+            if p.returncode != 0:
+                if record_meta.get("stopped_mtx"):
+                    await _svc_action("start", "mediamtx")
+                raise HTTPException(status_code=500, detail="Remux to MP4 failed")
+
+        # Optionally restart MediaMTX if we stopped it
+        if record_meta.get("stopped_mtx"):
+            await _svc_action("start", "mediamtx")
+
+        # reset state
+        record_proc = None
+        record_meta = {"out": None, "fps": None, "stopped_mtx": False}
+
+        return {"status": "stopped", "mp4": out_mp4}
+
 
 # Initialize serial connection (do this in startup event)
 ser = None
