@@ -1,5 +1,5 @@
 # RPI ZERO 2W
-
+# SYSTEM PREP
 Using Raspberri Pi Imager, install on a micro-SD card: 
     Raspberry Pi OS (Legacy , 32-bit) Bullseye with security updates and no desktop environment
     Edit configuration to set device name and wifi settings
@@ -21,10 +21,71 @@ sudo visudo
 #Below it, add:
     username ALL=(ALL) NOPASSWD:ALL
 
-sudo apt-get update
+sudo apt update
+sudo apt full-upgrade -y
+sudo reboot
+```
+# CAMERA
+```sh
+# Camera + tools
+sudo apt install -y libcamera-apps ffmpeg gpac curl python3 python3-pip
 
+mkdir -p ~/mediamtx && cd ~/mediamtx
+# pick correct asset (Zero 2 W = armv7l -> armv7)
+ARCH=$(uname -m); [ "$ARCH" = "armv7l" ] && MTX=armv7 || MTX=arm64
+curl -s https://api.github.com/repos/bluenviron/mediamtx/releases/latest \
+| grep -o "https://[^\"']*mediamtx_v[0-9.]*_linux_${MTX}\.tar\.gz" \
+| head -n1 | xargs -I{} wget -O mediamtx.tar.gz {}
+mkdir -p _x && tar xzf mediamtx.tar.gz -C _x
+cp $(find _x -type f -name mediamtx | head -1) ./mediamtx
+chmod +x mediamtx && rm -rf _x
+
+cat > ~/mediamtx/mediamtx.yml <<'YAML'
+# Disable unused protocols (optional, keeps attack surface small)
+rtsp: no
+rtmp: no
+hls: no
+srt: no
+webrtc: yes
+
+paths:
+  cam:
+    source: rpiCamera
+    rpiCameraWidth: 1920
+    rpiCameraHeight: 1080
+    rpiCameraFPS: 30
+    rpiCameraBitrate: 3000000
+    rpiCameraIDRPeriod: 30
+    sourceOnDemand: yes
+YAML
+
+sudo tee /etc/systemd/system/mediamtx.service >/dev/null <<'UNIT'
+[Unit]
+Description=MediaMTX (Pi Camera) – WebRTC
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi/mediamtx
+ExecStart=/home/pi/mediamtx/mediamtx /home/pi/mediamtx/mediamtx.yml
+Restart=always
+RestartSec=2
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now mediamtx
+```
+#Open in Safari/Chrome: http://<PI_IP>:8889/cam (WebRTC, low latency).
+
+# GITHUB CORE
+```bash
+sudo apt install python3 python3-pip
 sudo apt-get install git
-sudo apt-get install python3-pip
 sudo apt install libgpiod-dev
 
 git clone https://github.com/samweima1998/fiber-drawing-machine.git
