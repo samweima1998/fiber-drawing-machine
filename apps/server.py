@@ -85,6 +85,9 @@ class RecordStartReq(BaseModel):
     height: int = 1080
     fps: int = 30
     bitrate: int = 17_000_000
+    af_mode: str = "manual"            # "manual" | "auto" | "continuous"
+    lens_position: Optional[float] = None  # e.g. 0=infinity, 0.5≈2m, 2≈0.5m
+    meters: Optional[float] = None         # alternative: desired distance in meters
 
 async def _svc_is_active(name: str) -> bool:
     p = await asyncio.create_subprocess_exec(
@@ -115,7 +118,6 @@ async def record_start(body: RecordStartReq):
                 await _svc_action("stop", "mediamtx")
                 stopped_mtx = True
         except Exception:
-            # If we can't stop it, recording may fail with "device busy"
             pass
 
         # (Optional on Bullseye; hardware encoder module)
@@ -132,15 +134,50 @@ async def record_start(body: RecordStartReq):
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         out_h264 = Path.home()/ "videos" / f"rec_{body.width}x{body.height}_{body.fps}fps_{ts}.h264"
 
-        # Spawn libcamera-vid (headless)
+        # Fallback to MediaMTX defaults if AF not provided
+        try:
+            need_af_mode = (not getattr(body, "af_mode", None))
+            need_lens = (body.meters is None and body.lens_position is None)
+            if need_af_mode or need_lens:
+                import yaml, pathlib
+                yml = pathlib.Path("/home/pi/mediamtx/mediamtx.yml")
+                if yml.exists():
+                    cfg = yaml.safe_load(yml.read_text()) or {}
+                    cam = (cfg.get("paths") or {}).get("cam") or {}
+                    if need_af_mode:
+                        body.af_mode = cam.get("rpiCameraAfMode", "manual")
+                    if need_lens and cam.get("rpiCameraLensPosition") is not None:
+                        body.lens_position = float(cam["rpiCameraLensPosition"])
+        except Exception as e:
+            logging.warning(f"MTX defaults not loaded: {e}")
+
+        # 3) before spawning libcamera-vid, derive lens position
+        lens_pos = None
+        if body.meters is not None:
+            lens_pos = 0.0 if body.meters == 0 else round(1.0 / float(body.meters), 3)
+        elif body.lens_position is not None:
+            lens_pos = float(body.lens_position)
+
+        # 4) add focus flags to the command
         cmd = [
             "libcamera-vid", "--nopreview", "-t", "0", "--codec", "h264", "--inline",
             "--width", str(body.width), "--height", str(body.height),
             "--framerate", str(body.fps),
             "--bitrate", str(body.bitrate),
             "--intra", str(body.fps * 2),
-            "-o", str(out_h264)
         ]
+        # focus
+        if body.af_mode == "manual":
+            cmd += ["--autofocus-mode", "manual"]
+            if lens_pos is not None:
+                cmd += ["--lens-position", f"{lens_pos}"]
+        elif body.af_mode == "continuous":
+            cmd += ["--autofocus-mode", "continuous"]
+        elif body.af_mode == "auto":
+            cmd += ["--autofocus-mode", "auto", "--autofocus"]
+
+        cmd += ["-o", str(out_h264)]
+
         record_proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
