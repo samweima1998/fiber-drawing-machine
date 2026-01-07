@@ -18,6 +18,7 @@ from fastapi import Response
 import serial
 from shutil import which
 from datetime import datetime
+import time
 
 
 logging.basicConfig(level=logging.INFO)
@@ -294,6 +295,22 @@ async def pressure_streamer(process, stop_event, interval=0.1):
             logging.error(f"Pressure streamer error: {e}")
             break
         await asyncio.sleep(interval)  # 20ms = 50Hz
+
+
+async def sleep_with_skip(duration: float, phase_name: str = "", check_interval: float = 0.1) -> bool:
+    """Sleep in small increments and return True if skip_waiting_flag was triggered.
+
+    Returns True when the sleep was interrupted by a skip request, False otherwise.
+    """
+    global skip_waiting_flag
+    start = time.monotonic()
+    while time.monotonic() - start < duration:
+        if skip_waiting_flag:
+            logging.info(f"Skipping {phase_name} due to user request.")
+            skip_waiting_flag = False
+            return True
+        await asyncio.sleep(min(check_interval, duration - (time.monotonic() - start)))
+    return False
         
 @app.get("/status")
 async def get_status():
@@ -380,7 +397,10 @@ async def receive_data(data: InputData):
             await result_future_stop
 
             latest_status = "Maintaining contact"
-            await asyncio.sleep(data.contact_time)  # Wait for contact time
+            # Make this wait interruptible by /skip_waiting
+            skipped = await sleep_with_skip(data.contact_time, phase_name="Maintaining contact")
+            if skipped:
+                latest_status = "Maintaining contact skipped"
 
             #Pressure sensitive drawing
             result_future_guarded_move = asyncio.get_running_loop().create_future()
@@ -396,19 +416,6 @@ async def receive_data(data: InputData):
             await result_future_guarded_move
             logging.info("Drawing complete.")
             latest_status = "Drawing complete"
-
-            # # Move drawing_height*6250 (conversion from mm to steps) steps backward
-            # result_future_move = asyncio.get_running_loop().create_future()
-            # await stepper_queue.put({
-            #     "command": "MOVE",
-            #     "direction": "BACKWARD",
-            #     "steps": int(data.drawing_height * 6250),  # Convert mm to steps
-            #     "result": result_future_move
-            # })
-            # latest_status = "Drawing"
-            # await result_future_move
-            # logging.info("Drawing complete.")
-            # latest_status = "Drawing complete"
 
             # Wait until temperature condition is met
             latest_status = "Waiting for curing temperature"
@@ -428,7 +435,17 @@ async def receive_data(data: InputData):
                 logging.info(f"Sent 'start curing {data.curing_intensity}' command to Arduino.")
                 latest_status = "Gentle curing"
 
-            await asyncio.sleep(min(data.stretching_delay, data.curing_time))  # Wait for stretching time
+            # Wait for stretching time, but allow user to skip gentle curing
+            skipped = await sleep_with_skip(min(data.stretching_delay, data.curing_time), phase_name="Gentle curing")
+            if skipped:
+                # If skipping while curing, tell the Arduino to stop curing immediately and finish early
+                if ser and ser.is_open:
+                    ser.reset_input_buffer()  # Clear any old data
+                    ser.write(b"stop curing\n")
+                    ser.flush()
+                    logging.info("Sent 'stop curing' command to Arduino due to skip.")
+                latest_status = "Curing stopped"
+                return {"status": "skipped", "message": "Curing skipped by user"}
             #Pressure sensitive stretching
             logging.info("Starting pressure-sensitive stretching.")
             result_future_guarded_move = asyncio.get_running_loop().create_future()
@@ -444,28 +461,24 @@ async def receive_data(data: InputData):
             await result_future_guarded_move
             latest_status = "Gentle curing"
 
-            await asyncio.sleep(data.curing_time-data.stretching_delay)  # Wait for curing time
+            # Allow interrupting the remaining curing time
+            remaining = max(0, data.curing_time - data.stretching_delay)
+            skipped = await sleep_with_skip(remaining, phase_name="Gentle curing")
+            if skipped:
+                if ser and ser.is_open:
+                    ser.reset_input_buffer()  # Clear any old data
+                    ser.write(b"stop curing\n")
+                    ser.flush()
+                    logging.info("Sent 'stop curing' command to Arduino due to skip.")
+                latest_status = "Curing stopped"
+                return {"status": "skipped", "message": "Curing skipped by user"}
+
             if ser and ser.is_open:
                 ser.reset_input_buffer()  # Clear any old data
                 ser.write(b"stop curing\n")
                 ser.flush()
                 logging.info("Sent 'stop curing' command to Arduino.")
                 latest_status = "Curing complete"
-            
-            # if data.curing_time > 0:
-            #     if ser and ser.is_open:
-            #         ser.reset_input_buffer()  # Clear any old data
-            #         ser.write(f"start curing {min(data.curing_intensity*10, 100)}\n".encode())
-            #         ser.flush()
-            #         logging.info(f"Sent 'start curing {min(data.curing_intensity*10, 100)}' command to Arduino.")
-            #         latest_status = "Harsh curing"
-            #     await asyncio.sleep(data.curing_time)  # Wait for curing time
-            #     if ser and ser.is_open:
-            #         ser.reset_input_buffer()  # Clear any old data
-            #         ser.write(b"stop curing\n")
-            #         ser.flush()
-            #         logging.info("Sent 'stop curing' command to Arduino.")
-            #         latest_status = "Curing complete"
 
         except Exception as e:
             logging.error(f"Error in /send_data: {e}")
