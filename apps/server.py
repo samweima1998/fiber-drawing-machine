@@ -330,7 +330,7 @@ async def get_status():
 
 @app.post("/send_data")
 async def receive_data(data: InputData):
-    global latest_status, latest_temperature, latest_pressure, skip_waiting_flag
+    global latest_status, latest_temperature, latest_pressure, skip_waiting_flag, current_input_data
     if send_data_lock.locked():
         raise HTTPException(status_code=429, detail="Previous /send_data still in progress")
 
@@ -411,8 +411,10 @@ async def receive_data(data: InputData):
             await result_future_stop
 
             latest_status = "Maintaining contact"
-            # Make this wait interruptible by /skip_waiting
-            skipped = await sleep_with_skip(data.contact_time, phase_name="Maintaining contact")
+            # Make this wait interruptible by /skip_waiting (live-updates)
+            async with current_input_lock:
+                contact_time_val = current_input_data.contact_time if current_input_data else data.contact_time
+            skipped = await sleep_with_skip(contact_time_val, phase_name="Maintaining contact")
             if skipped:
                 latest_status = "Maintaining contact skipped"
 
@@ -458,8 +460,11 @@ async def receive_data(data: InputData):
                 logging.info(f"Sent 'start curing {intensity}' command to Arduino.")
                 latest_status = "Gentle curing"
 
-            # Wait for stretching time, but allow user to skip gentle curing
-            skipped = await sleep_with_skip(min(data.stretching_delay, data.curing_time), phase_name="Gentle curing")
+            # Wait for stretching time, but allow user to skip gentle curing (live-updates)
+            async with current_input_lock:
+                sd = current_input_data.stretching_delay if current_input_data else data.stretching_delay
+                ct = current_input_data.curing_time if current_input_data else data.curing_time
+            skipped = await sleep_with_skip(min(sd, ct), phase_name="Gentle curing")
             if skipped:
                 # If skipping while curing, tell the Arduino to stop curing immediately and finish early
                 if ser and ser.is_open:
