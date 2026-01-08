@@ -612,23 +612,27 @@ async def stepper_processor():
                         stop_event = asyncio.Event()
                         streamer_task = asyncio.create_task(pressure_streamer(process, stop_event))
 
-                        # Wait for DONE from stepper process
-                        while True:
-                            # Read one line from stdout (blocking)
-                            line = await process.stdout.readline()
-                            if not line:
-                                break
-                            decoded = line.decode().strip()
-                            logging.info(f"Stepper subprocess output: {decoded}")
-                            if decoded == "DONE":
-                                break
+                        # Monitor stdout in background so other commands (e.g. SET_THRESHOLD)
+                        # can be processed while the guarded move is running.
+                        async def monitor_guarded_move(cmd):
+                            try:
+                                while True:
+                                    line = await process.stdout.readline()
+                                    if not line:
+                                        break
+                                    decoded = line.decode().strip()
+                                    logging.info(f"Stepper subprocess output: {decoded}")
+                                    if decoded == "DONE":
+                                        break
+                            finally:
+                                # Stop pressure streaming and wait for the streamer task
+                                stop_event.set()
+                                await streamer_task
+                                if cmd.get("result"):
+                                    cmd["result"].set_result(True)
 
-                        # Stop pressure streaming
-                        stop_event.set()
-                        await streamer_task
-
-                        if command.get("result"):
-                            command["result"].set_result(True)
+                        # Start monitor but don't await it here; let it complete in background
+                        asyncio.create_task(monitor_guarded_move(command))
                         continue  # Prevent duplicate command send and wait below
                     else:
                         raise ValueError(f"Unknown stepper command: {command['command']}")
