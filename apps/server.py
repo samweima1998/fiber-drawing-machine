@@ -612,36 +612,6 @@ async def stepper_processor():
                         stop_event = asyncio.Event()
                         streamer_task = asyncio.create_task(pressure_streamer(process, stop_event))
 
-                        # Forward SET_THRESHOLD commands while the guarded move is running
-                        async def _threshold_forwarder():
-                            requeue = []
-                            try:
-                                while not stop_event.is_set():
-                                    try:
-                                        cmd2 = await asyncio.wait_for(stepper_queue.get(), timeout=0.1)
-                                    except asyncio.TimeoutError:
-                                        continue
-
-                                    if cmd2.get("command") == "SET_THRESHOLD":
-                                        val = float(cmd2.get("value", 0.0))
-                                        cmd_str2 = f"THRESH {val}\n"
-                                        logging.info(f"Forwarding threshold update to stepper during guarded move: {val}")
-                                        try:
-                                            process.stdin.write(cmd_str2.encode())
-                                            await process.stdin.drain()
-                                        except Exception as e:
-                                            logging.error(f"Failed to forward threshold to stepper: {e}")
-                                        if cmd2.get("result"):
-                                            cmd2["result"].set_result(True)
-                                    else:
-                                        # Not a SET_THRESHOLD: stash and requeue after the guarded move finishes
-                                        requeue.append(cmd2)
-                            finally:
-                                for c in requeue:
-                                    await stepper_queue.put(c)
-
-                        forwarder_task = asyncio.create_task(_threshold_forwarder())
-
                         # Wait for DONE from stepper process
                         while True:
                             # Read one line from stdout (blocking)
@@ -653,10 +623,9 @@ async def stepper_processor():
                             if decoded == "DONE":
                                 break
 
-                        # Stop pressure streaming and forwarder
+                        # Stop pressure streaming
                         stop_event.set()
                         await streamer_task
-                        await forwarder_task
 
                         if command.get("result"):
                             command["result"].set_result(True)
