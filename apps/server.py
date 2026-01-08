@@ -544,6 +544,16 @@ async def update_param(body: dict):
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid value: {e}")
     logging.info(f"Updated parameter {param} to {getattr(current_input_data, param)}")
+
+    # If the drawing pressure was updated, send a threshold update to the stepper subprocess
+    if param == "drawing_pressure":
+        try:
+            # Use the queue so stepper_processor forwards the command to the running process
+            await stepper_queue.put({"command": "SET_THRESHOLD", "value": float(getattr(current_input_data, param))})
+            logging.info(f"Enqueued SET_THRESHOLD {getattr(current_input_data, param)}")
+        except Exception as e:
+            logging.error(f"Failed to enqueue threshold update: {e}")
+
     return {"status": "updated", "param": param, "value": getattr(current_input_data, param)}
 
 
@@ -578,6 +588,19 @@ async def stepper_processor():
                         cmd_str = "STOP\n"
                     elif command["command"] == "MOVE":
                         cmd_str = f"{command['direction']} {command['steps']}\n"
+                    elif command["command"] == "SET_THRESHOLD":
+                        # Forward threshold update to the running stepper process so it can apply it immediately
+                        val = float(command.get("value", 0.0))
+                        cmd_str = f"THRESH {val}\n"
+                        logging.info(f"Sending threshold update to stepper: {val}")
+                        try:
+                            process.stdin.write(cmd_str.encode())
+                            await process.stdin.drain()
+                        except Exception as e:
+                            logging.error(f"Failed to send threshold to stepper: {e}")
+                        if command.get("result"):
+                            command["result"].set_result(True)
+                        continue
                     elif command["command"] == "GUARDED_MOVE":
                         cmd_str = f"GUARDED_MOVE {command['direction']} {command['steps']} {command.get('interval_us', 100)} {command['pressure_threshold']}\n"
                         logging.info(f"Sent to stepper: {cmd_str.strip()}")

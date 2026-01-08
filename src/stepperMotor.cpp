@@ -47,11 +47,13 @@ void continuousStep(gpiod_line* step_line, int interval_us) {
     }
 }
 
-// --- Continuous pressure streaming: use a reader thread and atomic variable ---
+// --- Continuous pressure streaming and runtime threshold updates: use reader thread and atomic variables ---
 #include <atomic>
 #include <thread>
 
 std::atomic<float> latest_pressure_value(0.0f);
+// New atomic to hold the currently active pressure threshold; guardedMove will consult this
+std::atomic<float> pressure_threshold_value(0.0f);
 std::atomic<bool> pressure_reader_running(false);
 std::thread pressure_reader_thread;
 
@@ -60,11 +62,22 @@ void pressureReader() {
     while (pressure_reader_running) {
         if (std::getline(std::cin, line)) {
             try {
-                latest_pressure_value = std::stof(line);
-                // std::cout << "Received pressure: " << latest_pressure_value << std::endl;
-                // std::cout.flush();
+                // Allow two kinds of lines on stdin:
+                // 1) plain pressure values (e.g. "-123.4") -> update latest_pressure_value
+                // 2) threshold commands (e.g. "THRESH -200") -> update pressure_threshold_value
+                if (line.rfind("THRESH ", 0) == 0) {
+                    float val = std::stof(line.substr(7));
+                    pressure_threshold_value = val;
+                    // Notify the parent process that threshold was updated (helps with debugging/logging)
+                    std::cout << "THRESH_UPDATED " << val << std::endl;
+                    std::cout.flush();
+                } else {
+                    latest_pressure_value = std::stof(line);
+                    // std::cout << "Received pressure: " << latest_pressure_value << std::endl;
+                    // std::cout.flush();
+                }
             } catch (...) {
-                // Ignore parse errors
+                // Ignore parse errors (unknown command or malformed number)
             }
         } else {
             // Sleep briefly to avoid busy-waiting
@@ -74,9 +87,12 @@ void pressureReader() {
 }
 
 void guardedMove(gpiod_line* step_line, gpiod_line* dir_line, gpiod_line* enable_line, Direction dir, int steps, int interval_us, float pressure_threshold) {
-    // Start pressure reader thread
+    // Start pressure reader thread (if not already running)
     pressure_reader_running = true;
     pressure_reader_thread = std::thread(pressureReader);
+
+    // Initialize the shared threshold so it can be updated later via "THRESH <val>"
+    pressure_threshold_value = pressure_threshold;
 
     gpiod_line_set_value(enable_line, 0);
     gpiod_line_set_value(dir_line, dir == FORWARD ? 1 : 0);
@@ -85,7 +101,8 @@ void guardedMove(gpiod_line* step_line, gpiod_line* dir_line, gpiod_line* enable
     int steps_taken = 0;
     while (steps_taken < steps) {
         float current_pressure = latest_pressure_value.load();
-        if (current_pressure < pressure_threshold) {
+        float current_threshold = pressure_threshold_value.load();
+        if (current_pressure < current_threshold) {
             // Step
             gpiod_line_set_value(step_line, 1);
             std::this_thread::sleep_for(std::chrono::microseconds(20));
