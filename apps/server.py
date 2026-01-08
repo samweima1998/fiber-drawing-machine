@@ -66,6 +66,10 @@ class InputData(BaseModel):
 # Global lock to prevent overlapping /send_data executions
 send_data_lock = asyncio.Lock()
 
+# Track current input data for live updates and a lock to protect it
+current_input_data: Optional[InputData] = None
+current_input_lock = asyncio.Lock()
+
 # Global variable to store the latest temperature
 latest_temperature: float = 0.0
 
@@ -314,10 +318,13 @@ async def sleep_with_skip(duration: float, phase_name: str = "", check_interval:
         
 @app.get("/status")
 async def get_status():
+    async with current_input_lock:
+        target = current_input_data.dict() if current_input_data else None
     status = {
         "current_temperature": latest_temperature,
         "current_pressure": latest_pressure,
         "status": latest_status,
+        "target_params": target,
     }
     return status
 
@@ -328,10 +335,17 @@ async def receive_data(data: InputData):
         raise HTTPException(status_code=429, detail="Previous /send_data still in progress")
 
     async with send_data_lock:
+        # store current input so it can be updated live
+        async with current_input_lock:
+            current_input_data = data
         try:
-            # Wait until temperature condition is met
+            # Wait until temperature condition is met (live-updating target)
             latest_status = "Waiting for drawing temperature"
-            while abs(latest_temperature - data.drawing_temperature) > 0.5:
+            while True:
+                async with current_input_lock:
+                    target_temp = current_input_data.drawing_temperature if current_input_data else data.drawing_temperature
+                if abs(latest_temperature - target_temp) <= 0.5:
+                    break
                 if skip_waiting_flag:
                     logging.info("Skipping waiting for drawing temperature due to user request.")
                     skip_waiting_flag = False
@@ -404,12 +418,15 @@ async def receive_data(data: InputData):
 
             #Pressure sensitive drawing
             result_future_guarded_move = asyncio.get_running_loop().create_future()
+            async with current_input_lock:
+                steps = int(current_input_data.drawing_height * 6250)
+                pressure_threshold = current_input_data.drawing_pressure
             await stepper_queue.put({
                 "command": "GUARDED_MOVE",
                 "direction": "BACKWARD",
-                "steps": int(data.drawing_height * 6250), # Convert mm to steps
+                "steps": steps, # Convert mm to steps
                 "interval_us": 200,
-                "pressure_threshold": data.drawing_pressure,
+                "pressure_threshold": pressure_threshold,
                 "result": result_future_guarded_move
             })
             latest_status = "Drawing"
@@ -417,9 +434,13 @@ async def receive_data(data: InputData):
             logging.info("Drawing complete.")
             latest_status = "Drawing complete"
 
-            # Wait until temperature condition is met
+            # Wait until temperature condition is met (live-updating target)
             latest_status = "Waiting for curing temperature"
-            while abs(latest_temperature - data.curing_temperature) > 0.5:
+            while True:
+                async with current_input_lock:
+                    target_curing_temp = current_input_data.curing_temperature if current_input_data else data.curing_temperature
+                if abs(latest_temperature - target_curing_temp) <= 0.5:
+                    break
                 if skip_waiting_flag:
                     logging.info("Skipping waiting for curing temperature due to user request.")
                     skip_waiting_flag = False
@@ -427,12 +448,14 @@ async def receive_data(data: InputData):
                 await asyncio.sleep(0.1)
             logging.info("curing temperature reached.")
 
-            # Start curing
+            # Start curing (use live-updating intensity)
             if ser and ser.is_open:
+                async with current_input_lock:
+                    intensity = current_input_data.curing_intensity
                 ser.reset_input_buffer()  # Clear any old data
-                ser.write(f"start curing {data.curing_intensity}\n".encode())
+                ser.write(f"start curing {intensity}\n".encode())
                 ser.flush()
-                logging.info(f"Sent 'start curing {data.curing_intensity}' command to Arduino.")
+                logging.info(f"Sent 'start curing {intensity}' command to Arduino.")
                 latest_status = "Gentle curing"
 
             # Wait for stretching time, but allow user to skip gentle curing
@@ -449,20 +472,24 @@ async def receive_data(data: InputData):
             #Pressure sensitive stretching
             logging.info("Starting pressure-sensitive stretching.")
             result_future_guarded_move = asyncio.get_running_loop().create_future()
+            async with current_input_lock:
+                steps_stretch = int(current_input_data.drawing_height * 625)
+                pressure_threshold = current_input_data.drawing_pressure
             await stepper_queue.put({
                 "command": "GUARDED_MOVE",
                 "direction": "BACKWARD",
-                "steps": int(data.drawing_height * 625), # 10% of drawing height for stretching
+                "steps": steps_stretch, # 10% of drawing height for stretching
                 "interval_us": 200,
-                "pressure_threshold": data.drawing_pressure,
+                "pressure_threshold": pressure_threshold,
                 "result": result_future_guarded_move
             })
             latest_status = "Stretching"
             await result_future_guarded_move
             latest_status = "Gentle curing"
 
-            # Allow interrupting the remaining curing time
-            remaining = max(0, data.curing_time - data.stretching_delay)
+            # Allow interrupting the remaining curing time (live-updates)
+            async with current_input_lock:
+                remaining = max(0, current_input_data.curing_time - current_input_data.stretching_delay)
             skipped = await sleep_with_skip(remaining, phase_name="Gentle curing")
             if skipped:
                 if ser and ser.is_open:
@@ -483,7 +510,37 @@ async def receive_data(data: InputData):
         except Exception as e:
             logging.error(f"Error in /send_data: {e}")
             return {"status": "error", "message": str(e)}
-    
+        finally:
+            # Clear current input data when run finishes, so /update_param fails when not running
+            async with current_input_lock:
+                current_input_data = None
+
+
+@app.post("/update_param")
+async def update_param(body: dict):
+    """
+    Update a single parameter on the currently running /send_data run.
+    Expects JSON: { "param": "<field_name>", "value": <number> }
+    """
+    param = body.get("param")
+    if not param:
+        raise HTTPException(status_code=400, detail="Missing 'param' field")
+    if "value" not in body:
+        raise HTTPException(status_code=400, detail="Missing 'value' field")
+    async with current_input_lock:
+        if current_input_data is None:
+            raise HTTPException(status_code=409, detail="No active /send_data run")
+        if not hasattr(current_input_data, param):
+            raise HTTPException(status_code=400, detail="Unknown parameter")
+        try:
+            current_val = getattr(current_input_data, param)
+            new_val = type(current_val)(body["value"])
+            setattr(current_input_data, param, new_val)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid value: {e}")
+    logging.info(f"Updated parameter {param} to {getattr(current_input_data, param)}")
+    return {"status": "updated", "param": param, "value": getattr(current_input_data, param)}
+
 
 async def stepper_processor():
     global shutdown_flag
