@@ -57,6 +57,7 @@ class InputData(BaseModel):
     drawing_temperature: float
     contact_time: float
     drawing_pressure: float
+    drawing_slowness: float
     drawing_height: float
     curing_temperature: float
     curing_intensity: float
@@ -423,11 +424,12 @@ async def receive_data(data: InputData):
             async with current_input_lock:
                 steps = int(current_input_data.drawing_height * 6250)
                 pressure_threshold = current_input_data.drawing_pressure
+                drawing_slowness = current_input_data.drawing_slowness
             await stepper_queue.put({
                 "command": "GUARDED_MOVE",
                 "direction": "BACKWARD",
                 "steps": steps, # Convert mm to steps
-                "interval_us": 200,
+                "interval_us": drawing_slowness,
                 "pressure_threshold": pressure_threshold,
                 "result": result_future_guarded_move
             })
@@ -480,11 +482,12 @@ async def receive_data(data: InputData):
             async with current_input_lock:
                 steps_stretch = int(current_input_data.drawing_height * 625)
                 pressure_threshold = current_input_data.drawing_pressure
+                drawing_slowness = current_input_data.drawing_slowness
             await stepper_queue.put({
                 "command": "GUARDED_MOVE",
                 "direction": "BACKWARD",
                 "steps": steps_stretch, # 10% of drawing height for stretching
-                "interval_us": 200,
+                "interval_us": drawing_slowness,
                 "pressure_threshold": pressure_threshold,
                 "result": result_future_guarded_move
             })
