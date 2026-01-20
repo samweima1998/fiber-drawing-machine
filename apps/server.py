@@ -341,14 +341,14 @@ async def receive_data(data: InputData):
             current_input_data = data
         try:
             # Wait until temperature condition is met (live-updating target)
-            latest_status = "Waiting for drawing temperature"
+            latest_status = "Waiting for drawing temperature before contact"
             while True:
                 async with current_input_lock:
                     target_temp = current_input_data.drawing_temperature if current_input_data else data.drawing_temperature
                 if abs(latest_temperature - target_temp) <= 0.5:
                     break
                 if skip_waiting_flag:
-                    logging.info("Skipping waiting for drawing temperature due to user request.")
+                    logging.info("Skipping waiting for drawing temperature before contact due to user request.")
                     skip_waiting_flag = False
                     break
                 await asyncio.sleep(0.1)
@@ -410,6 +410,20 @@ async def receive_data(data: InputData):
                 "result": result_future_stop
             })
             await result_future_stop
+
+            # Wait until temperature condition is met (live-updating target)
+            latest_status = "Waiting for drawing temperature while in contact"
+            while True:
+                async with current_input_lock:
+                    target_temp = current_input_data.drawing_temperature if current_input_data else data.drawing_temperature
+                if abs(latest_temperature - target_temp) <= 0.5:
+                    break
+                if skip_waiting_flag:
+                    logging.info("Skipping waiting for drawing temperature while in contact due to user request.")
+                    skip_waiting_flag = False
+                    break
+                await asyncio.sleep(0.1)
+            logging.info("Drawing temperature reached.")
 
             latest_status = "Maintaining contact"
             # Make this wait interruptible by /skip_waiting (live-updates)
