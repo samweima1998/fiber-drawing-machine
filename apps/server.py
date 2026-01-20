@@ -425,6 +425,8 @@ async def receive_data(data: InputData):
                 steps = int(current_input_data.drawing_height * 6250)
                 pressure_threshold = current_input_data.drawing_pressure
                 drawing_slowness = current_input_data.drawing_slowness
+                logging.info(f"DEBUG DRAWING: pressure_threshold read from current_input_data = {pressure_threshold} (type: {type(pressure_threshold)})")
+            logging.info(f"DEBUG DRAWING: pressure_threshold about to queue = {pressure_threshold} (type: {type(pressure_threshold)})")
             await stepper_queue.put({
                 "command": "GUARDED_MOVE",
                 "direction": "BACKWARD",
@@ -607,6 +609,7 @@ async def stepper_processor():
                     elif command["command"] == "GUARDED_MOVE":
                         cmd_str = f"GUARDED_MOVE {command['direction']} {command['steps']} {command.get('interval_us', 100)} {command['pressure_threshold']}\n"
                         logging.info(f"Sent to stepper: {cmd_str.strip()}")
+                        logging.info(f"DEBUG: pressure_threshold from command dict = {command.get('pressure_threshold')} (type: {type(command.get('pressure_threshold'))})")
                         process.stdin.write(cmd_str.encode())
                         await process.stdin.drain()
 
