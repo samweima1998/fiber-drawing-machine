@@ -607,7 +607,7 @@ async def stepper_processor():
                             command["result"].set_result(True)
                         continue
                     elif command["command"] == "GUARDED_MOVE":
-                        cmd_str = f"GUARDED_MOVE {command['direction']} {command['steps']} {command.get('interval_us', 100)} {command['pressure_threshold']}\n"
+                        cmd_str = f"GUARDED_MOVE {command['direction']} {int(command['steps'])} {int(command.get('interval_us', 100))} {command['pressure_threshold']}\n"
                         logging.info(f"Sent to stepper: {cmd_str.strip()}")
                         logging.info(f"DEBUG: pressure_threshold from command dict = {command.get('pressure_threshold')} (type: {type(command.get('pressure_threshold'))})")
                         process.stdin.write(cmd_str.encode())
