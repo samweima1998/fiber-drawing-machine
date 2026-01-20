@@ -496,7 +496,8 @@ async def receive_data(data: InputData):
             logging.info("Starting pressure-sensitive stretching.")
             result_future_guarded_move = asyncio.get_running_loop().create_future()
             async with current_input_lock:
-                steps_stretch = int(current_input_data.drawing_height * 625)
+                # steps_stretch = int(current_input_data.drawing_height * 625)
+                steps_stretch = 0; # Debug: set to 0 to disable stretching movement
                 pressure_threshold = current_input_data.drawing_pressure
                 drawing_slowness = current_input_data.drawing_slowness
             await stepper_queue.put({
