@@ -605,15 +605,18 @@ async def stepper_processor():
                             command["result"].set_result(True)
                         continue
                     elif command["command"] == "GUARDED_MOVE":
+                        # Start pressure streaming BEFORE sending the command
+                        logging.info("Starting pressure streamer for GUARDED_MOVE")
+                        stop_event = asyncio.Event()
+                        streamer_task = asyncio.create_task(pressure_streamer(process, stop_event))
+                        
+                        # Give streamer a moment to start writing pressure data
+                        await asyncio.sleep(0.01)
+                        
                         cmd_str = f"GUARDED_MOVE {command['direction']} {command['steps']} {command.get('interval_us', 100)} {command['pressure_threshold']}\n"
                         logging.info(f"Sent to stepper: {cmd_str.strip()}")
                         process.stdin.write(cmd_str.encode())
                         await process.stdin.drain()
-
-                        # Start pressure streaming
-                        logging.info("Starting pressure streamer for GUARDED_MOVE")
-                        stop_event = asyncio.Event()
-                        streamer_task = asyncio.create_task(pressure_streamer(process, stop_event))
 
                         # Monitor stdout in background so other commands (e.g. SET_THRESHOLD)
                         # can be processed while the guarded move is running.
