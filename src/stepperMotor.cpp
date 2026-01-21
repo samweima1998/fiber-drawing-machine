@@ -104,9 +104,11 @@ void guardedMove(gpiod_line* step_line, gpiod_line* dir_line, gpiod_line* enable
         float current_threshold = pressure_threshold_value.load();
         if (current_pressure < current_threshold) {
             // Step
+            gpiod_line_set_value(enable_line, 0);
             gpiod_line_set_value(step_line, 1);
             std::this_thread::sleep_for(std::chrono::microseconds(20));
             gpiod_line_set_value(step_line, 0);
+            gpiod_line_set_value(enable_line, 1); // disable motor between steps to save power
             std::this_thread::sleep_for(std::chrono::microseconds(interval_us));
             steps_taken++;
         } else {
