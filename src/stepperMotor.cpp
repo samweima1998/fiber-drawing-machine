@@ -108,8 +108,9 @@ void guardedMove(gpiod_line* step_line, gpiod_line* dir_line, gpiod_line* enable
             gpiod_line_set_value(step_line, 1);
             std::this_thread::sleep_for(std::chrono::microseconds(20));
             gpiod_line_set_value(step_line, 0);
+            std::this_thread::sleep_for(std::chrono::microseconds(20));
             gpiod_line_set_value(enable_line, 1); // disable motor between steps to save power
-            std::this_thread::sleep_for(std::chrono::microseconds(interval_us));
+            std::this_thread::sleep_for(std::chrono::microseconds(interval_us-20));
             steps_taken++;
         } else {
             // Pressure too high, pause stepping
