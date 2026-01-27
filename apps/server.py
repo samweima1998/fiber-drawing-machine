@@ -184,20 +184,20 @@ async def record_start(body: RecordStartReq):
 
         cmd += ["-o", str(out_h264)]
 
+        # Redirect stderr to DEVNULL to prevent buffer overflow
         record_proc = await asyncio.create_subprocess_exec(
             *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL
         )
 
         # Give it a moment to fail fast if there's a camera/format error
         await asyncio.sleep(1.0)
         if record_proc.returncode is not None:
-            err = (await record_proc.stderr.read()).decode(errors="ignore")
             # Try to restart MediaMTX if we stopped it
             if stopped_mtx:
                 await _svc_action("start", "mediamtx")
-            raise HTTPException(status_code=500, detail=f"libcamera-vid failed: {err.strip()}")
+            raise HTTPException(status_code=500, detail=f"libcamera-vid failed to start")
 
         record_meta.update({"out": str(out_h264), "fps": body.fps, "stopped_mtx": stopped_mtx})
         return {"status": "recording", "raw": str(out_h264), "fps": body.fps}
@@ -227,34 +227,54 @@ async def record_stop():
 
         out_mp4 = str(Path(out_h264).with_suffix(".mp4"))
 
-        # Remux to mp4 (prefer MP4Box; fallback to ffmpeg)
+        # Remux to mp4 (prefer MP4Box; fallback to ffmpeg) with timeout
+        remux_timeout = 60.0  # 60 second timeout for remux operations
+        
         if which("MP4Box"):
-            p = await asyncio.create_subprocess_exec(
-                "MP4Box", "-quiet", "-add", f"{out_h264}:fps={fps}", "-new", out_mp4,
-                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE
-            )
-            await p.wait()
-            if p.returncode != 0:
-                # Fallback to ffmpeg
+            try:
                 p = await asyncio.create_subprocess_exec(
-                    "ffmpeg", "-hide_banner", "-loglevel", "error",
-                    "-r", str(fps), "-f", "h264", "-i", out_h264, "-c", "copy", out_mp4
+                    "MP4Box", "-quiet", "-add", f"{out_h264}:fps={fps}", "-new", out_mp4,
+                    stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
                 )
-                await p.wait()
-                if p.returncode != 0:
+                await asyncio.wait_for(p.wait(), timeout=remux_timeout)
+                if p.returncode == 0:
+                    # Success with MP4Box
                     if record_meta.get("stopped_mtx"):
                         await _svc_action("start", "mediamtx")
-                    raise HTTPException(status_code=500, detail="Remux to MP4 failed")
-        else:
+                    record_proc = None
+                    record_meta = {"out": None, "fps": None, "stopped_mtx": False}
+                    return {"status": "stopped", "mp4": out_mp4}
+                else:
+                    logging.warning(f"MP4Box failed with code {p.returncode}, falling back to ffmpeg")
+            except asyncio.TimeoutError:
+                logging.warning("MP4Box remux timed out, killing and falling back to ffmpeg")
+                try:
+                    p.kill()
+                    await p.wait()
+                except:
+                    pass
+        
+        # Fallback to ffmpeg
+        try:
             p = await asyncio.create_subprocess_exec(
                 "ffmpeg", "-hide_banner", "-loglevel", "error",
-                "-r", str(fps), "-f", "h264", "-i", out_h264, "-c", "copy", out_mp4
+                "-r", str(fps), "-f", "h264", "-i", out_h264, "-c", "copy", out_mp4,
+                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
             )
-            await p.wait()
+            await asyncio.wait_for(p.wait(), timeout=remux_timeout)
             if p.returncode != 0:
                 if record_meta.get("stopped_mtx"):
                     await _svc_action("start", "mediamtx")
                 raise HTTPException(status_code=500, detail="Remux to MP4 failed")
+        except asyncio.TimeoutError:
+            try:
+                p.kill()
+                await p.wait()
+            except:
+                pass
+            if record_meta.get("stopped_mtx"):
+                await _svc_action("start", "mediamtx")
+            raise HTTPException(status_code=500, detail="Remux to MP4 timed out")
 
         # Optionally restart MediaMTX if we stopped it
         if record_meta.get("stopped_mtx"):
