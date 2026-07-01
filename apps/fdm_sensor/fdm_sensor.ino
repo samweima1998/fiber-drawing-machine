@@ -118,6 +118,13 @@ void pollTemperature()
     ds18b20.requestTemperatures();
     temperatureC = ds18b20.getTempCByIndex(0);
     nextTempPoll += TEMP_INTERVAL_MS;
+
+    if(temperatureC == DEVICE_DISCONNECTED_C) {
+      // sensor error
+      ds18b20.begin(); // reinit bus
+      ds18b20.requestTemperatures();
+      temperatureC = ds18b20.getTempCByIndex(0);
+    }
   }
 }
 
