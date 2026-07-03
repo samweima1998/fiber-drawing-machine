@@ -431,6 +431,18 @@ async def receive_data(data: InputData):
             })
             await result_future_stop
 
+            # Add a fixed 1 mm extension after first contact, without pressure checks.
+            extension_steps = 6250  # 1 mm extension
+            result_future_extension = asyncio.get_running_loop().create_future()
+            await stepper_queue.put({
+                "command": "MOVE",
+                "direction": "FORWARD",
+                "steps": extension_steps,
+                "result": result_future_extension
+            })
+            latest_status = "Extending after contact"
+            await result_future_extension
+
             # Wait until temperature condition is met (live-updating target)
             latest_status = "Waiting for drawing temperature while in contact"
             while True:
@@ -456,7 +468,7 @@ async def receive_data(data: InputData):
             #Pressure sensitive drawing
             result_future_guarded_move = asyncio.get_running_loop().create_future()
             async with current_input_lock:
-                steps = int(current_input_data.drawing_height * 6250)
+                steps = int(current_input_data.drawing_height * 6250 + extension_steps) # Compute total steps for drawing height + extension
                 pressure_threshold = current_input_data.drawing_pressure
                 drawing_slowness = current_input_data.drawing_slowness
                 logging.info(f"DEBUG DRAWING: pressure_threshold read from current_input_data = {pressure_threshold} (type: {type(pressure_threshold)})")
@@ -627,7 +639,7 @@ async def stepper_processor():
                     elif command["command"] == "STOP":
                         cmd_str = "STOP\n"
                     elif command["command"] == "MOVE":
-                        cmd_str = f"{command['direction']} {command['steps']}\n"
+                        cmd_str = f"MOVE {command['direction']} {command['steps']}\n"
                     elif command["command"] == "SET_THRESHOLD":
                         # Forward threshold update to the running stepper process so it can apply it immediately
                         val = float(command.get("value", 0.0))

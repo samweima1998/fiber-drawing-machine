@@ -225,6 +225,33 @@ int main() {
             continue;
         }
 
+        if (command == "MOVE") {
+            std::string direction_str;
+            int steps;
+            input_stream >> direction_str >> steps;
+
+            Direction dir;
+            if (direction_str == "FORWARD") dir = FORWARD;
+            else if (direction_str == "BACKWARD") dir = BACKWARD;
+            else {
+                std::cout << "ERROR: Invalid direction" << std::endl;
+                std::cout << "DONE" << std::endl;
+                std::cout.flush();
+                continue;
+            }
+
+            gpiod_line_set_value(enable_line, 0);
+            gpiod_line_set_value(dir_line, dir == FORWARD ? 1 : 0);
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+            pulseStepPin(step_line, steps);
+            gpiod_line_set_value(enable_line, 1);
+
+            std::cout << "SUCCESS: MOVE complete (" << steps << " steps " << direction_str << ")" << std::endl;
+            std::cout << "DONE" << std::endl;
+            std::cout.flush();
+            continue;
+        }
+
         // ...existing step command parsing...
         std::string direction_str = command;
         int steps;
