@@ -104,7 +104,7 @@ void guardedMove(gpiod_line* step_line, gpiod_line* dir_line, gpiod_line* enable
         float current_threshold = pressure_threshold_value.load();
         if (current_pressure < current_threshold) {
             float relative_pressure = current_pressure / current_threshold;
-            int interval_us_modified = int(1 / std::pow(1 - relative_pressure, 1.233) * interval_us); // Could modify based on pressure if desired
+            int interval_us_modified = int(1 / ((1 - relative_pressure)^1.233)) * interval_us; // Could modify based on pressure if desired
             // Step
             gpiod_line_set_value(step_line, 1);
             std::this_thread::sleep_for(std::chrono::microseconds(20));
