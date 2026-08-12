@@ -465,10 +465,30 @@ async def receive_data(data: InputData):
             if skipped:
                 latest_status = "Maintaining contact skipped"
 
+            # #Pressure sensitive recovery
+            # result_future_guarded_move = asyncio.get_running_loop().create_future()
+            # async with current_input_lock:
+            #     steps = int(extension_steps) # Recover extended steps 
+            #     pressure_threshold = current_input_data.drawing_pressure
+            #     logging.info(f"DEBUG DRAWING: pressure_threshold read from current_input_data = {pressure_threshold} (type: {type(pressure_threshold)})")
+            # logging.info(f"DEBUG DRAWING: pressure_threshold about to queue = {pressure_threshold} (type: {type(pressure_threshold)})")
+            # await stepper_queue.put({
+            #     "command": "GUARDED_MOVE",
+            #     "direction": "BACKWARD",
+            #     "steps": steps, # Convert mm to steps
+            #     "interval_us": 100,
+            #     "pressure_threshold": pressure_threshold,
+            #     "result": result_future_guarded_move
+            # })
+            # latest_status = "Recovery"
+            # await result_future_guarded_move
+            # logging.info("Recovery complete.")
+            # latest_status = "Recovery complete"
+
             #Pressure sensitive drawing
             result_future_guarded_move = asyncio.get_running_loop().create_future()
             async with current_input_lock:
-                steps = int(current_input_data.drawing_height * 6250 + extension_steps) # Compute total steps for drawing height + extension
+                steps = int(current_input_data.drawing_height * 6250 + extension_steps) # Compute total steps for drawing height
                 pressure_threshold = current_input_data.drawing_pressure
                 drawing_slowness = current_input_data.drawing_slowness
                 logging.info(f"DEBUG DRAWING: pressure_threshold read from current_input_data = {pressure_threshold} (type: {type(pressure_threshold)})")
