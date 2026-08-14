@@ -511,7 +511,7 @@ async def receive_data(data: InputData):
             while True:
                 async with current_input_lock:
                     target_curing_temp = current_input_data.curing_temperature if current_input_data else data.curing_temperature
-                if abs(latest_temperature - target_curing_temp) <= 0.5:
+                if abs(latest_temperature - target_curing_temp) <= 1:
                     break
                 if skip_waiting_flag:
                     logging.info("Skipping waiting for curing temperature due to user request.")
