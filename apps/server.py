@@ -336,7 +336,24 @@ async def sleep_with_skip(duration: float, phase_name: str = "", check_interval:
             return True
         await asyncio.sleep(min(check_interval, duration - (time.monotonic() - start)))
     return False
-        
+
+logs_dir = current_file_path.parent / "logs"
+
+async def data_logger(stop_event: asyncio.Event, log_path: Path, poll_interval: float = 0.1):
+    """Append a line whenever temperature/pressure/status changes, until stop_event is set."""
+    last_logged = None
+    with open(log_path, "a") as f:
+        while not stop_event.is_set():
+            current = (latest_temperature, latest_pressure, latest_status)
+            if current != last_logged:
+                timestamp = datetime.now().isoformat()
+                f.write(
+                    f"{timestamp}\tCurrent Temperature: {current[0]}\tCurrent Pressure: {current[1]}\tStatus: {current[2]}\n"
+                )
+                f.flush()
+                last_logged = current
+            await asyncio.sleep(poll_interval)
+
 @app.get("/status")
 async def get_status():
     async with current_input_lock:
@@ -359,6 +376,12 @@ async def receive_data(data: InputData):
         # store current input so it can be updated live
         async with current_input_lock:
             current_input_data = data
+
+        # Log Current Temperature/Pressure/Status on change, from start until the lock is released
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        log_path = logs_dir / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
+        log_stop_event = asyncio.Event()
+        log_task = asyncio.create_task(data_logger(log_stop_event, log_path))
         try:
             # Wait until temperature condition is met (live-updating target)
             latest_status = "Waiting for drawing temperature before contact"
@@ -591,6 +614,8 @@ async def receive_data(data: InputData):
             # Clear current input data when run finishes, so /update_param fails when not running
             async with current_input_lock:
                 current_input_data = None
+            log_stop_event.set()
+            await log_task
 
 
 @app.post("/update_param")
