@@ -63,6 +63,7 @@ class InputData(BaseModel):
     curing_intensity: float
     curing_time: float
     stretching_delay: float
+    client_epoch_ms: Optional[float] = None  # frontend device's Date.now(), used to sync the Pi clock
 
 # Global lock to prevent overlapping /send_data executions
 send_data_lock = asyncio.Lock()
@@ -378,6 +379,18 @@ async def receive_data(data: InputData):
             current_input_data = data
 
         # Log Current Temperature/Pressure/Status on change, from start until the lock is released
+        # Sync the Pi system clock to the frontend device (requires passwordless sudo for `date`)
+        if data.client_epoch_ms is not None:
+            try:
+                p = await asyncio.create_subprocess_exec(
+                    "sudo", "-n", "date", "-s", f"@{data.client_epoch_ms / 1000:.3f}",
+                    stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
+                )
+                await p.wait()
+                if p.returncode != 0:
+                    logging.warning(f"Setting system clock failed with code {p.returncode}")
+            except Exception as e:
+                logging.warning(f"Setting system clock failed: {e}")
         logs_dir.mkdir(parents=True, exist_ok=True)
         log_path = logs_dir / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
         log_stop_event = asyncio.Event()
