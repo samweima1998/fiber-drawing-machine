@@ -38,6 +38,7 @@ frontend/*
 /downloads/
 /packages/
 apps/logs/
-
+!apps/logs/logplotter.py
+!apps/logs/logpuller.py
 bcm2835-*
 
