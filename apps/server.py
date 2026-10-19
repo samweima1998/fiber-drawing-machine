@@ -55,6 +55,7 @@ stepper_executable = current_file_path.parent.parent / "build" / "stepperMotor"
 
 class InputData(BaseModel):
     drawing_temperature: float
+    contact_temperature: float
     contact_time: float
     drawing_pressure: float
     drawing_slowness: float
@@ -396,19 +397,19 @@ async def receive_data(data: InputData):
         log_stop_event = asyncio.Event()
         log_task = asyncio.create_task(data_logger(log_stop_event, log_path))
         try:
-            # Wait until temperature condition is met (live-updating target)
-            latest_status = "Waiting for drawing temperature before contact"
+            # Tare only after the live contact temperature target is reached.
+            latest_status = "Waiting for contact temperature before tare"
             while True:
                 async with current_input_lock:
-                    target_temp = current_input_data.drawing_temperature if current_input_data else data.drawing_temperature
+                    target_temp = current_input_data.contact_temperature if current_input_data else data.contact_temperature
                 if abs(latest_temperature - target_temp) <= 0.5:
                     break
                 if skip_waiting_flag:
-                    logging.info("Skipping waiting for drawing temperature before contact due to user request.")
+                    logging.info("Skipping waiting for contact temperature before tare due to user request.")
                     skip_waiting_flag = False
                     break
                 await asyncio.sleep(0.1)
-            logging.info("Drawing temperature reached.")
+            logging.info("Contact temperature reached.")
 
             # --- Trigger tare on Arduino ---
             if ser and ser.is_open:
@@ -437,7 +438,21 @@ async def receive_data(data: InputData):
                             latest_status = "Taring Failed"
                             raise TimeoutError("Timeout waiting for Arduino tare confirmation.")
                         continue
-            
+
+            # Wait until temperature condition is met (live-updating target)
+            latest_status = "Waiting for drawing temperature before contact"
+            while True:
+                async with current_input_lock:
+                    target_temp = current_input_data.drawing_temperature if current_input_data else data.drawing_temperature
+                if abs(latest_temperature - target_temp) <= 0.5:
+                    break
+                if skip_waiting_flag:
+                    logging.info("Skipping waiting for drawing temperature before contact due to user request.")
+                    skip_waiting_flag = False
+                    break
+                await asyncio.sleep(0.1)
+            logging.info("Drawing temperature reached.")
+
             # Start continuous stepping
             result_future_start = asyncio.get_running_loop().create_future()
             await stepper_queue.put({
