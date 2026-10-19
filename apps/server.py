@@ -439,20 +439,6 @@ async def receive_data(data: InputData):
                             raise TimeoutError("Timeout waiting for Arduino tare confirmation.")
                         continue
 
-            # Wait until temperature condition is met (live-updating target)
-            latest_status = "Waiting for drawing temperature before contact"
-            while True:
-                async with current_input_lock:
-                    target_temp = current_input_data.drawing_temperature if current_input_data else data.drawing_temperature
-                if abs(latest_temperature - target_temp) <= 0.5:
-                    break
-                if skip_waiting_flag:
-                    logging.info("Skipping waiting for drawing temperature before contact due to user request.")
-                    skip_waiting_flag = False
-                    break
-                await asyncio.sleep(0.1)
-            logging.info("Drawing temperature reached.")
-
             # Start continuous stepping
             result_future_start = asyncio.get_running_loop().create_future()
             await stepper_queue.put({
@@ -516,25 +502,33 @@ async def receive_data(data: InputData):
             if skipped:
                 latest_status = "Maintaining contact skipped"
 
-            # #Pressure sensitive recovery
-            # result_future_guarded_move = asyncio.get_running_loop().create_future()
-            # async with current_input_lock:
-            #     steps = int(extension_steps) # Recover extended steps 
-            #     pressure_threshold = current_input_data.drawing_pressure
-            #     logging.info(f"DEBUG DRAWING: pressure_threshold read from current_input_data = {pressure_threshold} (type: {type(pressure_threshold)})")
-            # logging.info(f"DEBUG DRAWING: pressure_threshold about to queue = {pressure_threshold} (type: {type(pressure_threshold)})")
-            # await stepper_queue.put({
-            #     "command": "GUARDED_MOVE",
-            #     "direction": "BACKWARD",
-            #     "steps": steps, # Convert mm to steps
-            #     "interval_us": 100,
-            #     "pressure_threshold": pressure_threshold,
-            #     "result": result_future_guarded_move
-            # })
-            # latest_status = "Recovery"
-            # await result_future_guarded_move
-            # logging.info("Recovery complete.")
-            # latest_status = "Recovery complete"
+            # --- Trigger tare on Arduino ---
+            if ser and ser.is_open:
+                ser.reset_input_buffer()  # Clear any old data
+                ser.write(b"t\n")
+                ser.flush()
+                logging.info("Sent 't' command to Arduino for tare.")
+                latest_status = "Taring"
+
+                # Wait for "# TARE_OK" confirmation (timeout after 5 seconds)
+                import time
+                start_time = time.time()
+                while True:
+                    try:
+                        # Wait for a line from the queue, with timeout
+                        line = await asyncio.wait_for(serial_line_queue.get(), timeout=0.5)
+                        logging.info(f"Arduino response: {line}")
+                        if "# TARE_OK" in line:
+                            logging.info("Tare confirmed by Arduino.")
+                            break
+                        if time.time() - start_time > 10:
+                            latest_status = "Taring Failed"
+                            raise TimeoutError("Timeout waiting for Arduino tare confirmation.")
+                    except asyncio.TimeoutError:
+                        if time.time() - start_time > 10:
+                            latest_status = "Taring Failed"
+                            raise TimeoutError("Timeout waiting for Arduino tare confirmation.")
+                        continue
 
             #Pressure sensitive drawing
             result_future_guarded_move = asyncio.get_running_loop().create_future()
