@@ -573,13 +573,13 @@ async def receive_data(data: InputData):
                 ser.write(f"start curing {intensity}\n".encode())
                 ser.flush()
                 logging.info(f"Sent 'start curing {intensity}' command to Arduino.")
-                latest_status = "Gentle curing"
+                latest_status = "Curing"
 
-            # Wait for stretching time, but allow user to skip gentle curing (live-updates)
+            # Wait for stretching time, but allow user to skip curing (live-updates)
             async with current_input_lock:
                 sd = current_input_data.stretching_delay if current_input_data else data.stretching_delay
                 ct = current_input_data.curing_time if current_input_data else data.curing_time
-            skipped = await sleep_with_skip(min(sd, ct), phase_name="Gentle curing")
+            skipped = await sleep_with_skip(min(sd, ct), phase_name="Curing")
             if skipped:
                 # If skipping while curing, tell the Arduino to stop curing immediately and finish early
                 if ser and ser.is_open:
@@ -607,12 +607,12 @@ async def receive_data(data: InputData):
             })
             latest_status = "Stretching"
             await result_future_guarded_move
-            latest_status = "Gentle curing"
+            latest_status = "Curing"
 
             # Allow interrupting the remaining curing time (live-updates)
             async with current_input_lock:
                 remaining = max(0, current_input_data.curing_time - current_input_data.stretching_delay)
-            skipped = await sleep_with_skip(remaining, phase_name="Gentle curing")
+            skipped = await sleep_with_skip(remaining, phase_name="Curing")
             if skipped:
                 if ser and ser.is_open:
                     ser.reset_input_buffer()  # Clear any old data
