@@ -5,7 +5,8 @@
 
   Protocol from Raspberry Pi → Arduino (USB‑Serial):
     - Send "T" or "tare" followed by newline → Arduino performs scale.tare();
-      replies one‑shot "# TARE_OK".
+      replies one‑shot "# TARE_OK" right after the first data line measured
+      with the new tare.
 
   Wiring
   ------
@@ -47,6 +48,7 @@ DallasTemperature ds18b20(&oneWire);
 unsigned long nextTempPoll = 0; // scheduler for DS18B20
 float temperatureC = NAN;       // last good temp value
 float raw_g_old = 0;
+bool tareAckPending = false; // set by tare command, cleared once ack is sent
 void setup()
 {
   Serial.begin(115200);
@@ -87,7 +89,7 @@ void handleSerialCommands()
   if (cmd == "t" || cmd == "tare")
   {
     scale.tare();
-    Serial.println(F("# TARE_OK"));
+    tareAckPending = true; // ack is sent from loop() after the first post-tare reading
   }
   if (cmd.startsWith("start curing")) {
     
@@ -135,6 +137,8 @@ void loop()
 
   // -------- Load‑cell reading --------
   float raw_g = scale.get_units(5); // grams
+  if (tareAckPending)
+    raw_g_old = raw_g; // don't average with a pre-tare value
   float raw_g_average = (raw_g + raw_g_old) / 2;
   // -------- Compensation (optional) ---
   float raw_kg = raw_g_average / 1000.0f;
@@ -149,6 +153,12 @@ void loop()
   Serial.print(raw_g_average, 0);
   Serial.print(',');
   Serial.println(comp_g, 0);
+
+  if (tareAckPending)
+  {
+    Serial.println(F("# TARE_OK"));
+    tareAckPending = false;
+  }
 
   raw_g_old = raw_g;
   // delay(100);   // ~10 Hz output (adjust if needed)
