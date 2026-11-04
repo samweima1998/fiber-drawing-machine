@@ -83,6 +83,9 @@ latest_pressure = 0.0
 latest_status: str = "Idle"
 # Global flag to skip waiting conditions
 skip_waiting_flag = False
+# Timed-phase tracking: end = phase_start + current value of phase_param
+phase_start: Optional[float] = None
+phase_param: Optional[str] = None
 
 record_proc: Optional[asyncio.subprocess.Process] = None
 record_meta = {"out": None, "fps": None, "stopped_mtx": False}
@@ -360,7 +363,12 @@ async def data_logger(stop_event: asyncio.Event, log_path: Path, poll_interval: 
 async def get_status():
     async with current_input_lock:
         target = current_input_data.dict() if current_input_data else None
+        remaining = None
+        if current_input_data and phase_param and phase_start is not None:
+            duration = getattr(current_input_data, phase_param)
+            remaining = max(0.0, phase_start + duration - time.time())
     status = {
+        "phase_remaining": remaining,
         "current_temperature": latest_temperature,
         "current_pressure": latest_pressure,
         "status": latest_status,
@@ -370,7 +378,7 @@ async def get_status():
 
 @app.post("/send_data")
 async def receive_data(data: InputData):
-    global latest_status, latest_temperature, latest_pressure, skip_waiting_flag, current_input_data
+    global latest_status, latest_temperature, latest_pressure, skip_waiting_flag, current_input_data, phase_start, phase_param
     if send_data_lock.locked():
         raise HTTPException(status_code=429, detail="Previous /send_data still in progress")
 
@@ -498,7 +506,9 @@ async def receive_data(data: InputData):
             # Make this wait interruptible by /skip_waiting (live-updates)
             async with current_input_lock:
                 contact_time_val = current_input_data.contact_time if current_input_data else data.contact_time
+            phase_start, phase_param = time.time(), "contact_time"
             skipped = await sleep_with_skip(contact_time_val, phase_name="Maintaining contact")
+            phase_param = None
             if skipped:
                 latest_status = "Maintaining contact skipped"
 
@@ -579,8 +589,10 @@ async def receive_data(data: InputData):
             async with current_input_lock:
                 sd = current_input_data.stretching_delay if current_input_data else data.stretching_delay
                 ct = current_input_data.curing_time if current_input_data else data.curing_time
+            phase_start, phase_param = time.time(), "curing_time"
             skipped = await sleep_with_skip(min(sd, ct), phase_name="Curing")
             if skipped:
+                phase_param = None
                 # If skipping while curing, tell the Arduino to stop curing immediately and finish early
                 if ser and ser.is_open:
                     ser.reset_input_buffer()  # Clear any old data
@@ -612,7 +624,9 @@ async def receive_data(data: InputData):
             # Allow interrupting the remaining curing time (live-updates)
             async with current_input_lock:
                 remaining = max(0, current_input_data.curing_time - current_input_data.stretching_delay)
+                phase_start = time.time() - current_input_data.stretching_delay
             skipped = await sleep_with_skip(remaining, phase_name="Curing")
+            phase_param = None
             if skipped:
                 if ser and ser.is_open:
                     ser.reset_input_buffer()  # Clear any old data
@@ -634,8 +648,10 @@ async def receive_data(data: InputData):
             return {"status": "error", "message": str(e)}
         finally:
             # Clear current input data when run finishes, so /update_param fails when not running
+            phase_param = None
             async with current_input_lock:
                 current_input_data = None
+                skip_waiting_flag = False
             log_stop_event.set()
             await log_task
 
@@ -865,7 +881,10 @@ async def serve_svelte():
 @app.post("/skip_waiting")
 async def skip_waiting():
     global skip_waiting_flag
-    skip_waiting_flag = True
+    async with current_input_lock:
+        if current_input_data is None:
+            raise HTTPException(status_code=409, detail="No active /send_data run")
+        skip_waiting_flag = True
     logging.info("Skip waiting triggered by user.")
     return {"status": "skipped"}
 
